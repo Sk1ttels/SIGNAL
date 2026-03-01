@@ -673,144 +673,191 @@ function tfMs(tf){
   return map[tf]||300e3;
 }
 
-// ─── REAL BINANCE WEBSOCKET + REST KLINES ────────────────────────────
-// Crypto (FIN): wss://stream.binance.com — публічний, без ключів
-// Forex/OTC: симуляція на базі реальної крипто-волатильності
-// (для реального Forex потрібен брокерський WS через CF Worker)
+// ─── MULTI-SOURCE REAL DATA FEED ─────────────────────────────────────
+// Джерела (авто-фалбек):
+//   1. Binance REST klines + WS тікери  (найкраще, реалтайм)
+//   2. CoinGecko REST (якщо Binance заблокований)
+//   3. Kraken REST + WS                 (резервне)
+//   4. Симуляція на реальній базі       (офлайн fallback)
 
 let binanceWS = null;
+let krakenWS  = null;
 let tickInterval = null;
 let wsReconnectTimer = null;
-let klinesFetched = {}; // sym+tf -> true
+let dataSource = 'none'; // 'binance' | 'coingecko' | 'kraken' | 'sim'
 
-// Binance symbol mapping (тільки для крипто)
 const BINANCE_SYMS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT'];
 
-// Завантажуємо реальні свічки з Binance REST API
+// CoinGecko IDs
+const GECKO_MAP = {
+  BTCUSDT:'bitcoin', ETHUSDT:'ethereum', SOLUSDT:'solana',
+  BNBUSDT:'binancecoin', XRPUSDT:'ripple'
+};
+// Kraken pairs
+const KRAKEN_MAP = {
+  BTCUSDT:'XBT/USDT', ETHUSDT:'ETH/USDT', SOLUSDT:'SOL/USDT',
+  BNBUSDT:'BNB/USDT', XRPUSDT:'XRP/USDT'
+};
+
+// ── 1. BINANCE ────────────────────────────────────────────────────────
 async function fetchBinanceKlines(sym, tf, limit=150){
-  const tfMap = {'1m':'1m','5m':'5m','15m':'15m','1h':'1h','4h':'4h'};
-  const interval = tfMap[tf]||'5m';
-  const url = `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}`;
-  try {
-    const res = await fetch(url);
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data = await res.json();
-    candles[sym][tf] = data.map(k=>({
-      t: k[0],
-      o: parseFloat(k[1]),
-      h: parseFloat(k[2]),
-      l: parseFloat(k[3]),
-      c: parseFloat(k[4]),
-    }));
-    // Оновлюємо поточну ціну з останньої свічки
-    const last = candles[sym][tf][candles[sym][tf].length-1];
-    if(prices[sym]){
-      prices[sym].price = last.c;
-      prices[sym].change = ((last.c / candles[sym][tf][0].o) - 1) * 100;
-    }
-    return true;
-  } catch(e){
-    console.warn('Klines fetch failed for', sym, tf, e.message);
-    return false;
+  const url = `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
+  const res = await fetch(url, {signal: AbortSignal.timeout(5000)});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  candles[sym][tf] = data.map(k=>({
+    t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4]
+  }));
+  const last = candles[sym][tf].at(-1);
+  if(prices[sym]){
+    prices[sym].price  = last.c;
+    prices[sym].change = ((last.c / candles[sym][tf][0].o) - 1) * 100;
   }
 }
 
-// Підключення до Binance WebSocket для реалтайм тіків
 function connectBinanceWS(){
-  if(binanceWS){ try{ binanceWS.close(); }catch(e){} }
-
-  // Підписка на міні-тікери всіх крипто пар одразу
+  if(binanceWS){ try{binanceWS.close()}catch(e){} }
   const streams = BINANCE_SYMS.map(s=>s.toLowerCase()+'@miniTicker').join('/');
-  const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+  binanceWS = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
 
-  updateConnStatus(false, 'ПІДКЛЮЧЕННЯ...');
-
-  try {
-    binanceWS = new WebSocket(wsUrl);
-
-    binanceWS.onopen = ()=>{
-      updateConnStatus(true, 'BINANCE WS LIVE');
-      console.log('Binance WS connected');
-    };
-
-    binanceWS.onmessage = (evt)=>{
-      try {
-        const msg = JSON.parse(evt.data);
-        const d = msg.data;
-        if(!d || d.e !== '24hrMiniTicker') return;
-        const sym = d.s; // e.g. 'BTCUSDT'
-        if(!prices[sym]) return;
-
-        const price = parseFloat(d.c); // last price
-        const open24 = parseFloat(d.o);
-
-        prices[sym].price = price;
-        prices[sym].change = ((price / open24) - 1) * 100;
-        prices[sym].history.push(price);
-        if(prices[sym].history.length>500) prices[sym].history.shift();
-
-        updateCurrentCandle(sym, price);
-
-        renderPairs();
-        if(activePair===sym) updateIndicators(sym);
-        runSignalEngineFor(sym);
-      } catch(e){}
-    };
-
-    binanceWS.onerror = (e)=>{
-      console.warn('Binance WS error', e);
-      updateConnStatus(false, 'ПОМИЛКА З\'ЄДНАННЯ');
-    };
-
-    binanceWS.onclose = ()=>{
-      updateConnStatus(false, 'ПЕРЕПІДКЛЮЧЕННЯ...');
-      clearTimeout(wsReconnectTimer);
-      wsReconnectTimer = setTimeout(connectBinanceWS, 3000);
-    };
-
-  } catch(e){
-    console.warn('WS init failed', e);
-    updateConnStatus(false, 'WS НЕДОСТУПНИЙ');
-    // Fallback to simulation
-    startSimulatedFeed();
-  }
+  binanceWS.onopen  = ()=>{ updateConnStatus(true,'🟢 BINANCE WS LIVE'); dataSource='binance'; };
+  binanceWS.onmessage = (e)=>{
+    try{
+      const d = JSON.parse(e.data).data;
+      if(!d||!prices[d.s]) return;
+      const price = +d.c, open24 = +d.o;
+      prices[d.s].price  = price;
+      prices[d.s].change = ((price/open24)-1)*100;
+      prices[d.s].history.push(price);
+      if(prices[d.s].history.length>500) prices[d.s].history.shift();
+      updateCurrentCandle(d.s, price);
+      renderPairs();
+      if(activePair===d.s) updateIndicators(d.s);
+      runSignalEngineFor(d.s);
+    }catch(e){}
+  };
+  binanceWS.onerror = ()=>{ updateConnStatus(false,'⚠ BINANCE НЕДОСТУПНИЙ'); };
+  binanceWS.onclose = ()=>{
+    updateConnStatus(false,'🔄 ПЕРЕПІДКЛЮЧЕННЯ...');
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = setTimeout(connectBinanceWS, 4000);
+  };
 }
 
-// Для Forex та OTC — симуляція на базі реальних пропорцій
-// (в продакшні: замінити на Cloudflare Worker → брокерський WS)
+// ── 2. COINGECKO (fallback REST, оновлення кожні 15с) ────────────────
+async function fetchCoinGeckoPrice(){
+  const ids = Object.values(GECKO_MAP).join(',');
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
+  const res = await fetch(url, {signal: AbortSignal.timeout(6000)});
+  if(!res.ok) throw new Error('CG '+res.status);
+  const data = await res.json();
+  Object.entries(GECKO_MAP).forEach(([sym,id])=>{
+    if(!data[id]||!prices[sym]) return;
+    const price = data[id].usd;
+    const chg   = data[id].usd_24h_change||0;
+    prices[sym].price  = price;
+    prices[sym].change = chg;
+    prices[sym].history.push(price);
+    if(prices[sym].history.length>500) prices[sym].history.shift();
+    updateCurrentCandle(sym, price);
+  });
+  return true;
+}
+
+// CoinGecko не дає свічки безкоштовно — генеруємо правдоподібні
+// на основі реальної поточної ціни та волатильності
+function buildCandlesFromPrice(sym){
+  if(!prices[sym]) return;
+  const p = prices[sym];
+  ['1m','5m','15m','1h','4h'].forEach(tf=>{
+    if(candles[sym][tf] && candles[sym][tf].length>5) return; // вже є
+    candles[sym][tf] = [];
+    const pair = [...FIN_PAIRS,...OTC_PAIRS].find(x=>x.sym===sym);
+    const vol = pair ? pair.vol : 0.001;
+    let price = p.price * (1 - p.change/100); // стартова ціна 24г тому
+    const count = 150;
+    for(let i=0;i<count;i++){
+      const drift = p.change/100/count; // дрейф до поточної ціни
+      const o = price;
+      const c = o*(1 + drift + (Math.random()-0.5)*vol*0.8);
+      const h = Math.max(o,c)*(1+Math.random()*vol*0.3);
+      const l = Math.min(o,c)*(1-Math.random()*vol*0.3);
+      candles[sym][tf].push({o,h,l,c, t:Date.now()-((count-i)*tfMs(tf))});
+      price = c;
+    }
+    // Останню свічку виставляємо на реальну ціну
+    candles[sym][tf].at(-1).c = p.price;
+  });
+}
+
+// ── 3. KRAKEN WS (другий резерв для крипто) ──────────────────────────
+function connectKrakenWS(){
+  if(krakenWS){ try{krakenWS.close()}catch(e){} }
+  krakenWS = new WebSocket('wss://ws.kraken.com');
+  krakenWS.onopen = ()=>{
+    updateConnStatus(true,'🟡 KRAKEN WS LIVE');
+    dataSource='kraken';
+    const pairs = Object.values(KRAKEN_MAP);
+    krakenWS.send(JSON.stringify({event:'subscribe', pair:pairs, subscription:{name:'ticker'}}));
+  };
+  krakenWS.onmessage = (e)=>{
+    try{
+      const msg = JSON.parse(e.data);
+      if(!Array.isArray(msg)||msg[2]!=='ticker') return;
+      const krakenPair = msg[3];
+      const sym = Object.entries(KRAKEN_MAP).find(([,v])=>v===krakenPair)?.[0];
+      if(!sym||!prices[sym]) return;
+      const price = +msg[1].c[0];
+      const open  = +msg[1].o[1];
+      prices[sym].price  = price;
+      prices[sym].change = ((price/open)-1)*100;
+      prices[sym].history.push(price);
+      if(prices[sym].history.length>500) prices[sym].history.shift();
+      updateCurrentCandle(sym, price);
+      renderPairs();
+      if(activePair===sym) updateIndicators(sym);
+      runSignalEngineFor(sym);
+    }catch(e){}
+  };
+  krakenWS.onerror = ()=>{ updateConnStatus(false,'⚠ KRAKEN ПОМИЛКА'); };
+  krakenWS.onclose = ()=>{ setTimeout(connectKrakenWS, 5000); };
+}
+
+// ── 4. FOREX/COMMODITY симуляція (реальний WS потребує брокера) ───────
 function startForexSimFeed(){
-  clearInterval(tickInterval);
-  tickInterval = setInterval(()=>{
-    const pairs = getPairs().filter(p=> p.type !== 'Crypto');
+  // Зупиняємо попередній якщо є
+  if(window._forexTimer) clearInterval(window._forexTimer);
+  window._forexTimer = setInterval(()=>{
+    const pairs = getPairs().filter(p=>p.type!=='Crypto');
     pairs.forEach(p=>{
       const st = prices[p.sym];
       if(!st) return;
-      const tick = (Math.random()-0.499)*st.vol*st.price*0.25;
-      st.price += tick;
-      st.change = ((st.price/st.base)-1)*100;
+      const tick = (Math.random()-0.499)*st.vol*st.price*0.2;
+      st.price  += tick;
+      st.change  = ((st.price/st.base)-1)*100;
       st.history.push(st.price);
       if(st.history.length>500) st.history.shift();
       updateCurrentCandle(p.sym, st.price);
     });
     renderPairs();
     if(activePair){
-      const pair = getPairs().find(p=>p.sym===activePair);
-      if(pair && pair.type!=='Crypto') updateIndicators(activePair);
+      const p = getPairs().find(x=>x.sym===activePair);
+      if(p && p.type!=='Crypto') updateIndicators(activePair);
     }
-  }, 1000);
+  }, 1200);
 }
 
-// Fallback — повна симуляція якщо WS недоступний
+// ── ПОВНА СИМУЛЯЦІЯ (офлайн fallback) ────────────────────────────────
 function startSimulatedFeed(){
   clearInterval(tickInterval);
+  updateConnStatus(false,'📴 OFFLINE MODE');
   tickInterval = setInterval(()=>{
-    const pairs = getPairs();
-    pairs.forEach(p=>{
+    getPairs().forEach(p=>{
       const st = prices[p.sym];
       if(!st) return;
       const tick = (Math.random()-0.499)*st.vol*st.price*0.3;
-      st.price += tick;
-      st.change = ((st.price/st.base)-1)*100;
+      st.price  += tick;
+      st.change  = ((st.price/st.base)-1)*100;
       st.history.push(st.price);
       if(st.history.length>500) st.history.shift();
       updateCurrentCandle(p.sym, st.price);
@@ -821,58 +868,98 @@ function startSimulatedFeed(){
   }, 800);
 }
 
-// Головна функція запуску
+// ── ГОЛОВНИЙ ЗАПУСК — авто-вибір джерела ─────────────────────────────
 async function startFeed(){
   clearInterval(tickInterval);
-  if(binanceWS){ try{ binanceWS.close(); }catch(e){} binanceWS=null; }
+  if(binanceWS){ try{binanceWS.close()}catch(e){} binanceWS=null; }
+  if(krakenWS){  try{krakenWS.close()}catch(e){} krakenWS=null;  }
+  clearTimeout(wsReconnectTimer);
+  if(window._forexTimer) clearInterval(window._forexTimer);
 
   initPrices();
   renderPairs();
-  updateConnStatus(false, 'ЗАВАНТАЖЕННЯ ДАНИХ...');
 
-  if(mode === 'FIN'){
-    // 1. Завантажуємо реальні свічки для всіх крипто пар
-    const cryptoPairs = FIN_PAIRS.filter(p=>p.type==='Crypto');
-    const tfs = ['1m','5m','15m','1h','4h'];
-
-    updateConnStatus(false, 'KLINES: ЗАВАНТАЖЕННЯ...');
-
-    // Завантажуємо свічки паралельно для активного TF
-    const fetchPromises = cryptoPairs.map(async p=>{
-      candles[p.sym] = candles[p.sym] || {};
-      // Завантажуємо всі таймфрейми
-      for(const tf of tfs){
-        await fetchBinanceKlines(p.sym, tf, 150);
-        await new Promise(r=>setTimeout(r,120)); // rate limit pause
-      }
-    });
-
-    // Не чекаємо всіх — запускаємо WS одразу, свічки підтягуються фоново
-    fetchPromises[0].then(()=>{
-      if(activePair && BINANCE_SYMS.includes(activePair)){
-        renderChart(activePair);
-        updateIndicators(activePair);
-      }
-    });
-
-    // Виконуємо перший fetch і одразу підключаємо WS
-    Promise.all(fetchPromises.slice(0,2)).then(()=>{
-      renderPairs();
-      connectBinanceWS();
-      startForexSimFeed(); // Forex паралельно
-    });
-
-    // Решту фетчимо фоново
-    Promise.all(fetchPromises).then(()=>{
-      renderPairs();
-      console.log('All klines loaded');
-    });
-
-  } else {
-    // OTC — симуляція (потребує брокерського API)
-    updateConnStatus(true, 'OTC SIM FEED');
+  if(mode === 'OTC'){
+    updateConnStatus(true,'🟡 OTC SIM FEED');
+    BINANCE_SYMS.forEach(sym=>{ if(candles[sym]) buildCandlesFromPrice(sym); });
     startSimulatedFeed();
+    return;
   }
+
+  // FIN mode — пробуємо джерела по черзі
+  updateConnStatus(false,'⏳ ЗАВАНТАЖЕННЯ...');
+
+  // Крок 1: Спробувати Binance REST klines (найкраще — реальні свічки)
+  let binanceOk = false;
+  try {
+    updateConnStatus(false,'⏳ BINANCE REST...');
+    await fetchBinanceKlines('BTCUSDT','5m',5); // тест
+    binanceOk = true;
+  } catch(e){ binanceOk = false; }
+
+  if(binanceOk){
+    // Завантажуємо всі пари та таймфрейми фоново
+    updateConnStatus(false,'📥 ЗАВАНТАЖЕННЯ СВІЧОК...');
+    const tfs = ['1m','5m','15m','1h','4h'];
+    const load = async()=>{
+      for(const p of FIN_PAIRS.filter(x=>BINANCE_SYMS.includes(x.sym))){
+        for(const tf of tfs){
+          try{ await fetchBinanceKlines(p.sym, tf, 150); }catch(e){}
+          await new Promise(r=>setTimeout(r,80));
+        }
+      }
+      renderPairs();
+      if(activePair) { renderChart(activePair); updateIndicators(activePair); }
+    };
+    load(); // фоново
+    connectBinanceWS();
+    startForexSimFeed();
+    setTimeout(()=>{ if(activePair) renderChart(activePair); }, 1500);
+    return;
+  }
+
+  // Крок 2: CoinGecko fallback
+  let geckoOk = false;
+  try {
+    updateConnStatus(false,'⏳ COINGECKO...');
+    geckoOk = await fetchCoinGeckoPrice();
+  } catch(e){ geckoOk = false; }
+
+  if(geckoOk){
+    dataSource = 'coingecko';
+    updateConnStatus(true,'🟢 COINGECKO LIVE');
+    BINANCE_SYMS.forEach(sym=>buildCandlesFromPrice(sym));
+    renderPairs();
+    if(activePair){ renderChart(activePair); updateIndicators(activePair); }
+    startForexSimFeed();
+
+    // Оновлення цін кожні 15 секунд (ліміт CoinGecko)
+    const geckoTimer = setInterval(async()=>{
+      try{
+        await fetchCoinGeckoPrice();
+        renderPairs();
+        if(activePair) updateIndicators(activePair);
+        runSignalEngine();
+      }catch(e){}
+    }, 15000);
+
+    // Паралельно намагаємось підключити Kraken WS
+    try{ connectKrakenWS(); }catch(e){}
+    return;
+  }
+
+  // Крок 3: Kraken WS
+  try {
+    updateConnStatus(false,'⏳ KRAKEN WS...');
+    connectKrakenWS();
+    BINANCE_SYMS.forEach(sym=>buildCandlesFromPrice(sym));
+    startForexSimFeed();
+    return;
+  } catch(e){}
+
+  // Крок 4: Повна симуляція
+  updateConnStatus(false,'📴 OFFLINE — СИМУЛЯЦІЯ');
+  startSimulatedFeed();
 }
 
 function updateCurrentCandle(sym, price){
@@ -1257,138 +1344,287 @@ function updateIndicators(sym){
   const ovEl=document.getElementById('overallSig');
   const ovConf=document.getElementById('overallConf');
   const maxV = Math.max(score.votes ? score.votes.buy : 0, score.votes ? score.votes.sell : 0);
-  if(score.dir==='BUY'){ ovEl.textContent='▲ BUY'; ovEl.style.color='var(--green)'; }
-  else if(score.dir==='SELL'){ ovEl.textContent='▼ SELL'; ovEl.style.color='var(--red)'; }
-  else { ovEl.textContent='⏳ '+maxV+'/4'; ovEl.style.color='var(--dim)'; }
-  ovConf.textContent = score.dir!=='NONE' ? score.conf+'%' : 'потрібно '+Math.max(4-maxV,0)+' більше';
-  ovConf.style.color = score.conf>=82?'var(--green)':score.conf>=70?'var(--yellow)':'var(--dim)';
+  if(score.dir==='BUY'){
+    ovEl.textContent='▲ BUY'; ovEl.style.color='var(--green)';
+    ovConf.textContent=score.conf+'%'; ovConf.style.color='var(--green)';
+  } else if(score.dir==='SELL'){
+    ovEl.textContent='▼ SELL'; ovEl.style.color='var(--red)';
+    ovConf.textContent=score.conf+'%'; ovConf.style.color='var(--red)';
+  } else {
+    ovEl.textContent='⏳ '+maxV+'/4'; ovEl.style.color='var(--dim)';
+    ovConf.textContent = score.filterFailed || ('ще '+(Math.max(4-maxV,0))+' голос(и)');
+    ovConf.style.color='var(--dim)';
+  }
+
+  // ADX в блоці Stoch RSI
+  const adxVal = calcADX(arr);
+  const stEl2=document.getElementById('stochVal');
+  const stSig2=document.getElementById('stochSig');
+  stEl2.textContent = stoch.k.toFixed(0)+' / '+adxVal.adx.toFixed(0);
+  stEl2.style.color = stoch.k<20||stoch.k>80 ? (stoch.k<20?'var(--green)':'var(--red)') : 'var(--yellow)';
+  if(adxVal.adx>=25){ stSig2.textContent='ADX: ТРЕНД ✓'; stSig2.style.color='var(--green)'; }
+  else if(adxVal.adx>=18){ stSig2.textContent='ADX: СЛАБКИЙ'; stSig2.style.color='var(--yellow)'; }
+  else { stSig2.textContent='ADX: ФЛЕТ ✗'; stSig2.style.color='var(--red)'; }
 }
 
-// ─── SIGNAL ENGINE (ULTRA STRICT — 4/5 confirmations required) ───────
+// ═══════════════════════════════════════════════════════════════════
+// МАКСИМАЛЬНО ТОЧНИЙ ДВИЖОК СИГНАЛІВ
+// Принцип: краще 2 точних ніж 20 сумнівних
+// Потрібно пройти ВСІ 7 фільтрів — якщо хоч один не пройшов: NONE
+// ═══════════════════════════════════════════════════════════════════
 let lastSignalTime = {};
 
-// ── Додаткові хелпери ────────────────────────────────────────────────
+// ── ДОПОМІЖНІ РОЗРАХУНКИ ────────────────────────────────────────────
 
-// Визначає силу тренду за нахилом EMA50
+// ATR — середній справжній діапазон (міра волатильності)
+function calcATR(arr, period=14){
+  if(arr.length < period+1) return null;
+  const trs = arr.slice(1).map((c,i)=>{
+    const prev = arr[i];
+    return Math.max(c.h-c.l, Math.abs(c.h-prev.c), Math.abs(c.l-prev.c));
+  });
+  // Wilder smoothing
+  let atr = trs.slice(0,period).reduce((a,b)=>a+b)/period;
+  for(let i=period; i<trs.length; i++) atr = (atr*(period-1)+trs[i])/period;
+  return atr;
+}
+
+// ADX — сила тренду (>25 = тренд є, <20 = флет)
+function calcADX(arr, period=14){
+  if(arr.length < period*2) return {adx:0, pdi:0, mdi:0};
+  const plusDM=[], minusDM=[], tr=[];
+  for(let i=1;i<arr.length;i++){
+    const hi = arr[i].h - arr[i-1].h;
+    const lo = arr[i-1].l - arr[i].l;
+    plusDM.push(hi>lo && hi>0 ? hi : 0);
+    minusDM.push(lo>hi && lo>0 ? lo : 0);
+    tr.push(Math.max(arr[i].h-arr[i].l, Math.abs(arr[i].h-arr[i-1].c), Math.abs(arr[i].l-arr[i-1].c)));
+  }
+  const smooth = (data, p) => {
+    let s = data.slice(0,p).reduce((a,b)=>a+b);
+    const res=[s];
+    for(let i=p;i<data.length;i++){ s = s - s/p + data[i]; res.push(s); }
+    return res;
+  };
+  const sTR=smooth(tr,period), sPDM=smooth(plusDM,period), sMDM=smooth(minusDM,period);
+  const pdi = sPDM.map((v,i)=>sTR[i]?v/sTR[i]*100:0);
+  const mdi = sMDM.map((v,i)=>sTR[i]?v/sTR[i]*100:0);
+  const dx  = pdi.map((v,i)=> (pdi[i]+mdi[i])>0 ? Math.abs(pdi[i]-mdi[i])/(pdi[i]+mdi[i])*100 : 0);
+  const adxArr = smooth(dx, period);
+  const n = adxArr.length-1;
+  return {adx: adxArr[n], pdi: pdi[pdi.length-1], mdi: mdi[mdi.length-1]};
+}
+
+// Нахил EMA50 (сила та напрямок тренду)
 function calcTrendStrength(closes){
   const ema50 = calcEMA(closes, 50);
-  const n = ema50.length - 1;
-  if(!ema50[n]||!ema50[n-5]) return 0;
-  return (ema50[n] - ema50[n-5]) / ema50[n-5] * 100;
+  const n = ema50.length-1;
+  if(!ema50[n]||!ema50[n-8]) return 0;
+  return (ema50[n]-ema50[n-8])/ema50[n-8]*100;
 }
 
-// Аналіз останніх 3 свічок: підтверджуюча свічка у напрямку сигналу
-function candleConfirmation(arr, dir){
-  if(arr.length<4) return false;
-  const last  = arr[arr.length-1];
-  const prev  = arr[arr.length-2];
-  const prev2 = arr[arr.length-3];
-  const body      = c => Math.abs(c.c - c.o);
-  const bullish   = c => c.c > c.o;
-  const bearish   = c => c.c < c.o;
-  const isEngulf  = (cur, prv, bullDir) => bullDir
-    ? (bullish(cur) && bearish(prv) && cur.c > prv.o && cur.o < prv.c && body(cur) > body(prv)*0.8)
-    : (bearish(cur) && bullish(prv) && cur.c < prv.o && cur.o > prv.c && body(cur) > body(prv)*0.8);
-  const isMom     = bullDir => bullDir
-    ? (bullish(last) && body(last) > body(prev)*0.5)
-    : (bearish(last) && body(last) > body(prev)*0.5);
-  const twoInRow  = bullDir => bullDir
-    ? (bullish(last) && bullish(prev))
-    : (bearish(last) && bearish(prev));
+// Дивергенція RSI — ціна робить новий екстремум, RSI ні
+function calcRSIDivergence(closes, arr, dir){
+  if(closes.length < 30) return false;
+  const rsiAll = [];
+  for(let i=14; i<=closes.length; i++) rsiAll.push(calcRSI(closes.slice(0,i)));
+  const n = rsiAll.length-1;
+  if(rsiAll[n]===null) return false;
 
-  if(dir==='BUY')  return isEngulf(last,prev,true)  || (twoInRow(true)  && isMom(true));
-  if(dir==='SELL') return isEngulf(last,prev,false) || (twoInRow(false) && isMom(false));
-  return false;
+  if(dir==='BUY'){
+    // Бичача дивергенція: ціна нижче, RSI вище
+    const priceLL = closes[closes.length-1] < Math.min(...closes.slice(-20,-1));
+    const rsiHL   = rsiAll[n] > rsiAll[n-5];
+    return priceLL && rsiHL;
+  } else {
+    // Ведмежа дивергенція: ціна вище, RSI нижче
+    const priceHH = closes[closes.length-1] > Math.max(...closes.slice(-20,-1));
+    const rsiLH   = rsiAll[n] < rsiAll[n-5];
+    return priceHH && rsiLH;
+  }
 }
 
-// Перевірка: чи НЕ перебуваємо всередині бічного (флет) руху
-function isInTrend(closes, minSlope=0.015){
-  const slope = calcTrendStrength(closes);
-  return Math.abs(slope) >= minSlope;
+// Рівні підтримки/спротиву (pivot points)
+function calcPivots(arr){
+  const slice = arr.slice(-20);
+  const h = Math.max(...slice.map(c=>c.h));
+  const l = Math.min(...slice.map(c=>c.l));
+  const c = slice.at(-1).c;
+  const pivot = (h+l+c)/3;
+  return {
+    r1: 2*pivot - l,
+    s1: 2*pivot - h,
+    pivot,
+    nearSupport: (price) => Math.abs(price-l)/price < 0.003,
+    nearResist:  (price) => Math.abs(price-h)/price < 0.003,
+  };
 }
 
-// Основна функція оцінки — СТРОГА: кожен індикатор = 1 голос
+// Свічковий патерн (строгий)
+function candlePattern(arr, dir){
+  if(arr.length < 5) return {ok:false, name:''};
+  const c  = arr.at(-1);
+  const p1 = arr.at(-2);
+  const p2 = arr.at(-3);
+  const body = x => Math.abs(x.c-x.o);
+  const bull = x => x.c > x.o;
+  const bear = x => x.c < x.o;
+  const atr  = (arr.slice(-10).reduce((s,x)=>s+(x.h-x.l),0))/10;
+
+  if(dir==='BUY'){
+    // 1. Бичаче поглинання
+    if(bear(p1) && bull(c) && c.c>p1.o && c.o<p1.c && body(c)>body(p1)*1.0)
+      return {ok:true, name:'Бичаче поглинання'};
+    // 2. Молот (Hammer) — довга нижня тінь
+    const lowerWick = Math.min(c.o,c.c) - c.l;
+    const upperWick = c.h - Math.max(c.o,c.c);
+    if(lowerWick > body(c)*2 && upperWick < body(c)*0.5 && lowerWick > atr*0.4)
+      return {ok:true, name:'Молот'};
+    // 3. Три бичачих свічки поспіль із зростанням
+    if(bull(c)&&bull(p1)&&bull(p2) && c.c>p1.c && p1.c>p2.c)
+      return {ok:true, name:'Три бики'};
+    // 4. Пін-бар від підтримки
+    if(lowerWick > body(c)*3 && c.c > (c.h+c.l)/2)
+      return {ok:true, name:'Пін-бар (підтримка)'};
+  }
+
+  if(dir==='SELL'){
+    // 1. Ведмеже поглинання
+    if(bull(p1) && bear(c) && c.c<p1.o && c.o>p1.c && body(c)>body(p1)*1.0)
+      return {ok:true, name:'Ведмеже поглинання'};
+    // 2. Повішений (Hanging Man) — довга верхня тінь
+    const upperWick2 = c.h - Math.max(c.o,c.c);
+    const lowerWick2 = Math.min(c.o,c.c) - c.l;
+    if(upperWick2 > body(c)*2 && lowerWick2 < body(c)*0.5 && upperWick2 > atr*0.4)
+      return {ok:true, name:'Зірка падіння'};
+    // 3. Три ведмежих свічки поспіль
+    if(bear(c)&&bear(p1)&&bear(p2) && c.c<p1.c && p1.c<p2.c)
+      return {ok:true, name:'Три ведмеді'};
+    // 4. Пін-бар від спротиву
+    if(upperWick2 > body(c)*3 && c.c < (c.h+c.l)/2)
+      return {ok:true, name:'Пін-бар (спротив)'};
+  }
+  return {ok:false, name:''};
+}
+
+// ── ГОЛОВНА ФУНКЦІЯ ОЦІНКИ (7 фільтрів) ────────────────────────────
 function getSignalScore(sym, arr){
-  if(arr.length<80) return {dir:'NONE', conf:0, reasons:[], votes:{buy:0,sell:0}};
+  const NONE = (v={buy:0,sell:0}) => ({dir:'NONE', conf:0, reasons:[], votes:v, filterFailed:''});
+  if(arr.length < 100) return NONE();
 
   const closes = arr.map(c=>c.c);
+  const highs  = arr.map(c=>c.h);
+  const lows   = arr.map(c=>c.l);
+
+  // ── Розраховуємо всі індикатори ──
   const rsi    = calcRSI(closes);
   const macd   = calcMACD(closes);
-  const bb     = calcBB(closes);
+  const bb     = calcBB(closes, 20, 2);
   const stoch  = calcStochRSI(closes);
-  const ema9v  = calcEMA(closes, 9);
-  const ema21v = calcEMA(closes, 21);
-  const ema50v = calcEMA(closes, 50);
-  const ema9   = ema9v[ema9v.length-1];
-  const ema21  = ema21v[ema21v.length-1];
-  const ema50  = ema50v[ema50v.length-1];
-  const lastC  = closes[closes.length-1];
-  const trendSlope = calcTrendStrength(closes);
+  const ema9   = calcEMA(closes,9).at(-1);
+  const ema21  = calcEMA(closes,21).at(-1);
+  const ema50  = calcEMA(closes,50).at(-1);
+  const ema200 = calcEMA(closes,200);
+  const ema200Last = ema200.at(-1);
+  const ema200Prev = ema200.at(-10);
+  const atr    = calcATR(arr);
+  const adx    = calcADX(arr);
+  const trend  = calcTrendStrength(closes);
+  const pivots = calcPivots(arr);
+  const lastC  = closes.at(-1);
 
-  // VOTE SYSTEM — кожен блок дає 1 голос (max 5 buy + 5 sell)
-  let buyVotes=0, sellVotes=0;
-  const buyReasons=[], sellReasons=[];
+  let buyV=0, sellV=0;
+  const buyR=[], sellR=[];
 
-  // 1. RSI — жорсткі зони
-  if(rsi!==null){
-    if(rsi <= 28)     { buyVotes++;  buyReasons.push(`RSI перепроданий ${rsi.toFixed(0)}`); }
-    else if(rsi >= 72){ sellVotes++; sellReasons.push(`RSI перекуплений ${rsi.toFixed(0)}`); }
+  // ══ ГОЛОСУВАННЯ (5 блоків по 1 голосу) ══════════════════════════
+
+  // 1. RSI + Stoch RSI — ОБИДВА мають бути в зоні
+  const rsiBuy  = rsi!==null && rsi<=30;
+  const rsiSell = rsi!==null && rsi>=70;
+  const stBuy   = stoch.k<=20;
+  const stSell  = stoch.k>=80;
+  if(rsiBuy  && stBuy ){ buyV++;  buyR.push(`RSI ${rsi.toFixed(0)} + Stoch ${stoch.k.toFixed(0)} — перепродано`); }
+  if(rsiSell && stSell){ sellV++; sellR.push(`RSI ${rsi.toFixed(0)} + Stoch ${stoch.k.toFixed(0)} — перекуплено`); }
+
+  // 2. MACD — тільки справжнє пересечення нуля або сигнальної
+  if(macd.crossUp)  { buyV++;  buyR.push('MACD бичаче пересечення'); }
+  if(macd.crossDown){ sellV++; sellR.push('MACD ведмеже пересечення'); }
+
+  // 3. Bollinger Bands — торкання + відскок (ціна повернулась всередину)
+  if(bb.lastL && bb.lastU){
+    const pos = (lastC-bb.lastL)/(bb.lastU-bb.lastL);
+    const prevPos = (closes.at(-2)-bb.lastL)/(bb.lastU-bb.lastL);
+    // Відскок від нижньої: торкнулись і відскочили вгору
+    if(prevPos<=0.05 && pos>prevPos){ buyV++;  buyR.push('BB відскок від нижньої межі'); }
+    // Відскок від верхньої: торкнулись і відскочили вниз
+    if(prevPos>=0.95 && pos<prevPos){ sellV++; sellR.push('BB відскок від верхньої межі'); }
   }
 
-  // 2. MACD — тільки РЕАЛЬНЕ пересечення (не просто гістограма)
-  if(macd.macd!==null){
-    if(macd.crossUp)  { buyVotes++;  buyReasons.push('MACD бичаче пересечення ✓'); }
-    if(macd.crossDown){ sellVotes++; sellReasons.push('MACD ведмеже пересечення ✓'); }
-    // без cross — 0 голосів
+  // 4. EMA стек 9/21/50 + напрямок EMA200
+  if(ema9&&ema21&&ema50&&ema200Last){
+    const bull200 = ema200Last > (ema200Prev||ema200Last);
+    const bear200 = ema200Last < (ema200Prev||ema200Last);
+    if(ema9>ema21 && ema21>ema50 && bull200){ buyV++;  buyR.push('EMA 9>21>50 + EMA200 зростає'); }
+    if(ema9<ema21 && ema21<ema50 && bear200){ sellV++; sellR.push('EMA 9<21<50 + EMA200 падає'); }
   }
 
-  // 3. Bollinger Bands — тільки торкання/пробій межі
-  if(bb.lastU && bb.lastL){
-    const pos = (lastC - bb.lastL) / (bb.lastU - bb.lastL);
-    if(pos <= 0.04)   { buyVotes++;  buyReasons.push('Торкання нижньої BB'); }
-    else if(pos >= 0.96){ sellVotes++; sellReasons.push('Торкання верхньої BB'); }
-  }
+  // 5. Рівні підтримки/спротиву + об'єм свічок
+  const lastBody = Math.abs(arr.at(-1).c - arr.at(-1).o);
+  const avgBody  = arr.slice(-20).reduce((s,c)=>s+Math.abs(c.c-c.o),0)/20;
+  const strongCandle = lastBody > avgBody * 1.3; // свічка сильніша за середню
+  if(pivots.nearSupport(lastC) && strongCandle){ buyV++;  buyR.push('Відскок від рівня підтримки'); }
+  if(pivots.nearResist(lastC)  && strongCandle){ sellV++; sellR.push('Відскок від рівня спротиву'); }
 
-  // 4. EMA 9/21/50 — усі три повинні вирівнятись в одному напрямку
-  if(ema9 && ema21 && ema50){
-    if(ema9 > ema21 && ema21 > ema50)  { buyVotes++;  buyReasons.push('EMA 9>21>50 бичачий стек'); }
-    if(ema9 < ema21 && ema21 < ema50)  { sellVotes++; sellReasons.push('EMA 9<21<50 ведмежий стек'); }
-  }
+  const votes = {buy:buyV, sell:sellV};
 
-  // 5. Stoch RSI — жорсткі зони
-  if(stoch.k <= 15)   { buyVotes++;  buyReasons.push(`Stoch RSI ${stoch.k.toFixed(0)} — дно`); }
-  else if(stoch.k >= 85){ sellVotes++; sellReasons.push(`Stoch RSI ${stoch.k.toFixed(0)} — вершина`); }
+  // ══ 7 ОБОВ'ЯЗКОВИХ ФІЛЬТРІВ ══════════════════════════════════════
 
-  // ── ОБОВ'ЯЗКОВІ ФІЛЬТРИ (якщо не проходять — скасовуємо сигнал) ──
+  // Ф1: Мінімум 4/5 голосів
+  const maxV = Math.max(buyV, sellV);
+  if(maxV < 4) return NONE(votes);
+  const dir = buyV>=4 ? 'BUY' : 'SELL';
+  const reasons = dir==='BUY' ? buyR : sellR;
 
-  // Фільтр 1: мінімум 4 голоси у напрямку
-  const maxVotes = Math.max(buyVotes, sellVotes);
-  if(maxVotes < 4) return {dir:'NONE', conf:0, reasons:[], votes:{buy:buyVotes,sell:sellVotes}};
+  // Ф2: ADX > 22 — ринок У ТРЕНДІ, не флет
+  if(adx.adx < 22) return {...NONE(votes), filterFailed:`ADX ${adx.adx.toFixed(0)} < 22 (флет)`};
 
-  const dir = buyVotes >= 4 ? 'BUY' : 'SELL';
-  const reasons = dir==='BUY' ? buyReasons : sellReasons;
+  // Ф3: Напрямок ADX (PDI/MDI) відповідає сигналу
+  if(dir==='BUY'  && adx.pdi <= adx.mdi) return {...NONE(votes), filterFailed:'ADX: тренд ведмежий'};
+  if(dir==='SELL' && adx.mdi <= adx.pdi) return {...NONE(votes), filterFailed:'ADX: тренд бичачий'};
 
-  // Фільтр 2: підтверджуюча свічка (паттерн)
-  const candleOk = candleConfirmation(arr, dir);
-  if(!candleOk) return {dir:'NONE', conf:0, reasons, votes:{buy:buyVotes,sell:sellVotes}};
-  reasons.push('Свічковий паттерн підтверджено');
+  // Ф4: ATR достатній (не нульова волатильність, не екстремальна)
+  if(!atr) return NONE(votes);
+  const atrPct = atr/lastC*100;
+  if(atrPct < 0.05) return {...NONE(votes), filterFailed:'ATR занадто низький (немає руху)'};
+  if(atrPct > 8.0)  return {...NONE(votes), filterFailed:'ATR занадто високий (хаос)'};
 
-  // Фільтр 3: ринок у тренді (не флет)
-  if(!isInTrend(closes)) return {dir:'NONE', conf:0, reasons, votes:{buy:buyVotes,sell:sellVotes}};
+  // Ф5: Свічковий патерн підтверджено
+  const pattern = candlePattern(arr, dir);
+  if(!pattern.ok) return {...NONE(votes), filterFailed:'Немає свічкового патерну'};
+  reasons.push(`Патерн: ${pattern.name}`);
 
-  // Фільтр 4: напрямок тренду відповідає сигналу
-  if(dir==='BUY'  && trendSlope < 0) return {dir:'NONE', conf:0, reasons, votes:{buy:buyVotes,sell:sellVotes}};
-  if(dir==='SELL' && trendSlope > 0) return {dir:'NONE', conf:0, reasons, votes:{buy:buyVotes,sell:sellVotes}};
+  // Ф6: Нахил тренду відповідає напрямку
+  if(dir==='BUY'  && trend < 0.008) return {...NONE(votes), filterFailed:'Тренд не підтверджує BUY'};
+  if(dir==='SELL' && trend > -0.008) return {...NONE(votes), filterFailed:'Тренд не підтверджує SELL'};
 
-  // Підрахунок впевненості: base 80% + бонуси
-  let conf = 80;
-  if(maxVotes === 5) conf += 10;       // всі 5 — +10%
-  if(Math.abs(trendSlope) > 0.05) conf += 4;
-  const oppVotes = dir==='BUY' ? sellVotes : buyVotes;
-  if(oppVotes === 0) conf += 5;        // нуль протилежних
+  // Ф7: Нуль протилежних голосів (сигнал без суперечностей)
+  const oppV = dir==='BUY' ? sellV : buyV;
+  if(oppV > 0) return {...NONE(votes), filterFailed:`${oppV} протилежних голоси`};
+
+  // ══ БОНУС: RSI дивергенція ══
+  const diverg = calcRSIDivergence(closes, arr, dir);
+  if(diverg){ reasons.push('RSI дивергенція ✓'); }
+
+  // ══ РОЗРАХУНОК ВПЕВНЕНОСТІ ══
+  let conf = 82;                                      // база
+  if(maxV === 5)             conf += 8;               // всі 5 голосів
+  if(adx.adx > 35)           conf += 4;               // сильний тренд
+  if(atrPct > 0.15 && atrPct < 3.0) conf += 3;       // здорова волатильність
+  if(diverg)                 conf += 4;               // дивергенція
+  if(Math.abs(trend) > 0.08) conf += 3;               // крутий нахил
   conf = Math.min(conf, 97);
 
-  return {dir, conf, reasons, votes:{buy:buyVotes, sell:sellVotes}};
+  return {dir, conf, reasons, votes, filterFailed:'', pattern: pattern.name};
 }
 
 let signalCheckCounter = 0;
@@ -1414,6 +1650,7 @@ function emitSignal(pair, score, price){
     mode: mode,
     reasons: score.reasons,
     voteCount: voteCount,
+    pattern: score.pattern||'',
     time: new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
   };
 
@@ -1443,6 +1680,7 @@ function renderSignals(){
         <span class="sig-badge">${s.mode}</span>
         <span class="sig-badge conf">⚡ ${s.conf}%</span>
         <span class="sig-badge" style="background:rgba(0,212,255,0.1);color:var(--accent)">✓ ${s.voteCount}/5</span>
+        ${s.pattern ? `<span class="sig-badge" style="background:rgba(255,204,0,0.1);color:var(--yellow)">${s.pattern}</span>` : ''}
       </div>
       <div class="sig-confidence">
         <div class="conf-label">
