@@ -1262,7 +1262,10 @@ function calcBB(data, period=20, mult=2){
     upper.push(m+mult*std); lower.push(m-mult*std); mid.push(m);
   }
   const n=data.length-1;
-  return {upper,lower,mid, lastU:upper[n],lastL:lower[n],lastM:mid[n]};
+  const lastU=upper[n], lastL=lower[n], lastM=mid[n];
+  // Захист: якщо BB некоректний (std=0 або дані однакові)
+  const valid = lastU && lastL && lastU > lastL && (lastU-lastL)/lastM > 0.0001;
+  return {upper,lower,mid, lastU, lastL, lastM, valid};
 }
 
 function calcStochRSI(data, period=14, smooth=3){
@@ -1312,13 +1315,16 @@ function updateIndicators(sym){
   // BB
   const bbEl=document.getElementById('bbVal');
   const bbSig=document.getElementById('bbSig');
-  if(bb.lastU){
-    const pos = (lastClose-bb.lastL)/(bb.lastU-bb.lastL);
+  if(bb.valid){
+    const pos = Math.max(0, Math.min(1, (lastClose-bb.lastL)/(bb.lastU-bb.lastL)));
     bbEl.textContent=(pos*100).toFixed(0)+'%';
-    if(pos>0.95){ bbEl.style.color='var(--red)'; bbSig.textContent='ВЫШЕ ВЕРХНЕЙ'; bbSig.style.color='var(--red)'; }
-    else if(pos<0.05){ bbEl.style.color='var(--green)'; bbSig.textContent='НИЖЕ НИЖНЕЙ'; bbSig.style.color='var(--green)'; }
-    else if(pos>0.55){ bbEl.style.color='var(--yellow)'; bbSig.textContent='ВЕРХ КАНАЛА'; bbSig.style.color='var(--yellow)'; }
-    else { bbEl.style.color='var(--yellow)'; bbSig.textContent='НИЗ КАНАЛА'; bbSig.style.color='var(--yellow)'; }
+    if(pos>0.95){ bbEl.style.color='var(--red)'; bbSig.textContent='ВИЩЕ ВЕРХНЬОЇ'; bbSig.style.color='var(--red)'; }
+    else if(pos<0.05){ bbEl.style.color='var(--green)'; bbSig.textContent='НИЖЧЕ НИЖНЬОЇ'; bbSig.style.color='var(--green)'; }
+    else if(pos>0.6){ bbEl.style.color='var(--yellow)'; bbSig.textContent='ВЕРХ КАНАЛУ'; bbSig.style.color='var(--yellow)'; }
+    else { bbEl.style.color='var(--yellow)'; bbSig.textContent='НИЗ КАНАЛУ'; bbSig.style.color='var(--yellow)'; }
+  } else {
+    bbEl.textContent='—'; bbEl.style.color='var(--dim)';
+    bbSig.textContent='Мало даних'; bbSig.style.color='var(--dim)';
   }
 
   // EMA
@@ -1390,29 +1396,63 @@ function calcATR(arr, period=14){
 }
 
 // ADX — сила тренду (>25 = тренд є, <20 = флет)
+// Правильний алгоритм Уайлдера
 function calcADX(arr, period=14){
-  if(arr.length < period*2) return {adx:0, pdi:0, mdi:0};
-  const plusDM=[], minusDM=[], tr=[];
-  for(let i=1;i<arr.length;i++){
-    const hi = arr[i].h - arr[i-1].h;
-    const lo = arr[i-1].l - arr[i].l;
-    plusDM.push(hi>lo && hi>0 ? hi : 0);
-    minusDM.push(lo>hi && lo>0 ? lo : 0);
-    tr.push(Math.max(arr[i].h-arr[i].l, Math.abs(arr[i].h-arr[i-1].c), Math.abs(arr[i].l-arr[i-1].c)));
+  if(arr.length < period*3) return {adx:0, pdi:0, mdi:0};
+  const data = arr.slice(-Math.min(arr.length, 200)); // обмежуємо масив
+
+  const plusDM=[], minusDM=[], trArr=[];
+  for(let i=1;i<data.length;i++){
+    const upMove   = data[i].h - data[i-1].h;
+    const downMove = data[i-1].l - data[i].l;
+    plusDM.push( (upMove > downMove && upMove > 0)   ? upMove   : 0);
+    minusDM.push((downMove > upMove && downMove > 0) ? downMove : 0);
+    trArr.push(Math.max(
+      data[i].h - data[i].l,
+      Math.abs(data[i].h - data[i-1].c),
+      Math.abs(data[i].l - data[i-1].c)
+    ));
   }
-  const smooth = (data, p) => {
-    let s = data.slice(0,p).reduce((a,b)=>a+b);
-    const res=[s];
-    for(let i=p;i<data.length;i++){ s = s - s/p + data[i]; res.push(s); }
+
+  // Wilder smoothing: перший = сума period значень, далі: prev - prev/period + current
+  const wilderSmooth = (arr, p) => {
+    if(arr.length < p) return [];
+    const res = [];
+    let val = arr.slice(0, p).reduce((a,b)=>a+b, 0);
+    res.push(val);
+    for(let i=p; i<arr.length; i++){
+      val = val - (val/p) + arr[i];
+      res.push(val);
+    }
     return res;
   };
-  const sTR=smooth(tr,period), sPDM=smooth(plusDM,period), sMDM=smooth(minusDM,period);
-  const pdi = sPDM.map((v,i)=>sTR[i]?v/sTR[i]*100:0);
-  const mdi = sMDM.map((v,i)=>sTR[i]?v/sTR[i]*100:0);
-  const dx  = pdi.map((v,i)=> (pdi[i]+mdi[i])>0 ? Math.abs(pdi[i]-mdi[i])/(pdi[i]+mdi[i])*100 : 0);
-  const adxArr = smooth(dx, period);
+
+  const smoothTR  = wilderSmooth(trArr,   period);
+  const smoothPDM = wilderSmooth(plusDM,  period);
+  const smoothMDM = wilderSmooth(minusDM, period);
+
+  if(smoothTR.length < period) return {adx:0, pdi:0, mdi:0};
+
+  // +DI і -DI (0-100)
+  const pdiArr = smoothPDM.map((v,i) => smoothTR[i]>0 ? Math.min((v/smoothTR[i])*100, 100) : 0);
+  const mdiArr = smoothMDM.map((v,i) => smoothTR[i]>0 ? Math.min((v/smoothTR[i])*100, 100) : 0);
+
+  // DX (0-100)
+  const dxArr = pdiArr.map((v,i) => {
+    const sum = v + mdiArr[i];
+    return sum > 0 ? Math.min((Math.abs(v - mdiArr[i]) / sum) * 100, 100) : 0;
+  });
+
+  // ADX = Wilder smooth of DX (0-100)
+  const adxArr = wilderSmooth(dxArr, period);
+  if(adxArr.length === 0) return {adx:0, pdi:0, mdi:0};
+
   const n = adxArr.length-1;
-  return {adx: adxArr[n], pdi: pdi[pdi.length-1], mdi: mdi[mdi.length-1]};
+  return {
+    adx: Math.min(Math.max(adxArr[n] / period, 0), 100), // нормалізація
+    pdi: pdiArr.at(-1),
+    mdi: mdiArr.at(-1)
+  };
 }
 
 // Нахил EMA50 (сила та напрямок тренду)
@@ -1551,9 +1591,9 @@ function getSignalScore(sym, arr){
   if(macd.crossDown){ sellV++; sellR.push('MACD ведмеже пересечення'); }
 
   // 3. Bollinger Bands — торкання + відскок (ціна повернулась всередину)
-  if(bb.lastL && bb.lastU){
-    const pos = (lastC-bb.lastL)/(bb.lastU-bb.lastL);
-    const prevPos = (closes.at(-2)-bb.lastL)/(bb.lastU-bb.lastL);
+  if(bb.valid){
+    const pos = Math.max(0, Math.min(1, (lastC-bb.lastL)/(bb.lastU-bb.lastL)));
+    const prevPos = Math.max(0, Math.min(1, (closes.at(-2)-bb.lastL)/(bb.lastU-bb.lastL)));
     // Відскок від нижньої: торкнулись і відскочили вгору
     if(prevPos<=0.05 && pos>prevPos){ buyV++;  buyR.push('BB відскок від нижньої межі'); }
     // Відскок від верхньої: торкнулись і відскочили вниз
