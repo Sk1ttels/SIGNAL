@@ -1003,10 +1003,10 @@ function runSignalEngineFor(sym){
   if(arr.length<80) return;
   const score = getSignalScore(sym, arr);
   if(score.dir==='NONE') return;
-  if(score.conf < 82) return;
+  if(score.conf < 75) return; // було 82, тепер 75
 
   const last = lastSignalTime[sym+currentTF]||0;
-  const cooldown = tfMs(currentTF)*6;
+  const cooldown = tfMs(currentTF)*4; // було 6 свічок, тепер 4
   if(now-last<cooldown) return;
 
   lastSignalTime[sym+currentTF] = now;
@@ -1578,90 +1578,84 @@ function getSignalScore(sym, arr){
 
   // ══ ГОЛОСУВАННЯ (5 блоків по 1 голосу) ══════════════════════════
 
-  // 1. RSI + Stoch RSI — ОБИДВА мають бути в зоні
-  const rsiBuy  = rsi!==null && rsi<=30;
-  const rsiSell = rsi!==null && rsi>=70;
-  const stBuy   = stoch.k<=20;
-  const stSell  = stoch.k>=80;
-  if(rsiBuy  && stBuy ){ buyV++;  buyR.push(`RSI ${rsi.toFixed(0)} + Stoch ${stoch.k.toFixed(0)} — перепродано`); }
-  if(rsiSell && stSell){ sellV++; sellR.push(`RSI ${rsi.toFixed(0)} + Stoch ${stoch.k.toFixed(0)} — перекуплено`); }
+  // 1. RSI — трохи пом'якшені зони (було 30/70, стало 33/67)
+  //    АБО тільки RSI, АБО тільки Stoch — кожен дає окремий голос
+  if(rsi!==null){
+    if(rsi <= 33)     { buyV++;  buyR.push(`RSI ${rsi.toFixed(0)} — перепродано`); }
+    else if(rsi >= 67){ sellV++; sellR.push(`RSI ${rsi.toFixed(0)} — перекуплено`); }
+  }
 
-  // 2. MACD — тільки справжнє пересечення нуля або сигнальної
-  if(macd.crossUp)  { buyV++;  buyR.push('MACD бичаче пересечення'); }
-  if(macd.crossDown){ sellV++; sellR.push('MACD ведмеже пересечення'); }
+  // 2. MACD — пересечення сигнальної лінії (найнадійніший сигнал)
+  if(macd.crossUp)  { buyV++;  buyR.push('MACD ↑ пересечення'); }
+  if(macd.crossDown){ sellV++; sellR.push('MACD ↓ пересечення'); }
+  // Додатково: гістограма розвертається
+  const macdPrevHist = macd.hist - (macd.macd - macd.signal);
+  if(!macd.crossUp   && macd.hist>0 && macd.hist > macdPrevHist*1.5 && macd.macd<0){ buyV++;  buyR.push('MACD імпульс від нуля ↑'); }
+  if(!macd.crossDown && macd.hist<0 && macd.hist < macdPrevHist*1.5 && macd.macd>0){ sellV++; sellR.push('MACD імпульс від нуля ↓'); }
 
-  // 3. Bollinger Bands — торкання + відскок (ціна повернулась всередину)
+  // 3. Bollinger Bands — розширені зони (було 5%/95%, стало 10%/90%)
   if(bb.valid){
-    const pos = Math.max(0, Math.min(1, (lastC-bb.lastL)/(bb.lastU-bb.lastL)));
+    const pos     = Math.max(0, Math.min(1, (lastC      - bb.lastL)/(bb.lastU-bb.lastL)));
     const prevPos = Math.max(0, Math.min(1, (closes.at(-2)-bb.lastL)/(bb.lastU-bb.lastL)));
-    // Відскок від нижньої: торкнулись і відскочили вгору
-    if(prevPos<=0.05 && pos>prevPos){ buyV++;  buyR.push('BB відскок від нижньої межі'); }
-    // Відскок від верхньої: торкнулись і відскочили вниз
-    if(prevPos>=0.95 && pos<prevPos){ sellV++; sellR.push('BB відскок від верхньої межі'); }
+    if(pos <= 0.12 && pos >= prevPos-0.03){ buyV++;  buyR.push(`BB нижня зона (${(pos*100).toFixed(0)}%)`); }
+    if(pos >= 0.88 && pos <= prevPos+0.03){ sellV++; sellR.push(`BB верхня зона (${(pos*100).toFixed(0)}%)`); }
   }
 
-  // 4. EMA стек 9/21/50 + напрямок EMA200
-  if(ema9&&ema21&&ema50&&ema200Last){
-    const bull200 = ema200Last > (ema200Prev||ema200Last);
-    const bear200 = ema200Last < (ema200Prev||ema200Last);
-    if(ema9>ema21 && ema21>ema50 && bull200){ buyV++;  buyR.push('EMA 9>21>50 + EMA200 зростає'); }
-    if(ema9<ema21 && ema21<ema50 && bear200){ sellV++; sellR.push('EMA 9<21<50 + EMA200 падає'); }
+  // 4. EMA стек — послаблений: достатньо 9/21 + EMA50 підтверджує напрямок
+  if(ema9&&ema21&&ema50){
+    if(ema9>ema21 && lastC>ema50){ buyV++;  buyR.push('EMA 9>21, ціна вище EMA50'); }
+    if(ema9<ema21 && lastC<ema50){ sellV++; sellR.push('EMA 9<21, ціна нижче EMA50'); }
   }
 
-  // 5. Рівні підтримки/спротиву + об'єм свічок
-  const lastBody = Math.abs(arr.at(-1).c - arr.at(-1).o);
-  const avgBody  = arr.slice(-20).reduce((s,c)=>s+Math.abs(c.c-c.o),0)/20;
-  const strongCandle = lastBody > avgBody * 1.3; // свічка сильніша за середню
-  if(pivots.nearSupport(lastC) && strongCandle){ buyV++;  buyR.push('Відскок від рівня підтримки'); }
-  if(pivots.nearResist(lastC)  && strongCandle){ sellV++; sellR.push('Відскок від рівня спротиву'); }
+  // 5. Stoch RSI — окремий блок (було об'єднаний з RSI)
+  if(stoch.k <= 25)      { buyV++;  buyR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона покупок`); }
+  else if(stoch.k >= 75) { sellV++; sellR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона продаж`); }
 
   const votes = {buy:buyV, sell:sellV};
 
-  // ══ 7 ОБОВ'ЯЗКОВИХ ФІЛЬТРІВ ══════════════════════════════════════
+  // ══ ФІЛЬТРИ (5 замість 7, збалансовані) ══════════════════════════
 
-  // Ф1: Мінімум 4/5 голосів
+  // Ф1: Мінімум 3/5 голосів (було 4) — дає 2-5 сигналів на день
   const maxV = Math.max(buyV, sellV);
-  if(maxV < 4) return NONE(votes);
-  const dir = buyV>=4 ? 'BUY' : 'SELL';
-  const reasons = dir==='BUY' ? buyR : sellR;
+  if(maxV < 3) return NONE(votes);
+  const dir = buyV>=3 ? 'BUY' : 'SELL';
+  const reasons = dir==='BUY' ? [...buyR] : [...sellR];
 
-  // Ф2: ADX > 22 — ринок У ТРЕНДІ, не флет
-  if(adx.adx < 22) return {...NONE(votes), filterFailed:`ADX ${adx.adx.toFixed(0)} < 22 (флет)`};
+  // Ф2: Якщо тільки 3 голоси — потрібен MACD серед них (якірний індикатор)
+  if(maxV === 3){
+    const hasMacd = reasons.some(r=>r.includes('MACD'));
+    if(!hasMacd) return {...NONE(votes), filterFailed:'3 голоси без MACD — ненадійно'};
+  }
 
-  // Ф3: Напрямок ADX (PDI/MDI) відповідає сигналу
-  if(dir==='BUY'  && adx.pdi <= adx.mdi) return {...NONE(votes), filterFailed:'ADX: тренд ведмежий'};
-  if(dir==='SELL' && adx.mdi <= adx.pdi) return {...NONE(votes), filterFailed:'ADX: тренд бичачий'};
+  // Ф3: ADX > 18 (було 22) — менш суворо, ловимо початок тренду
+  if(adx.adx < 18) return {...NONE(votes), filterFailed:`ADX ${adx.adx.toFixed(0)} — флет`};
 
-  // Ф4: ATR достатній (не нульова волатильність, не екстремальна)
+  // Ф4: Напрямок ADX відповідає сигналу
+  if(dir==='BUY'  && adx.pdi < adx.mdi - 3) return {...NONE(votes), filterFailed:'ADX напрямок: ведмежий'};
+  if(dir==='SELL' && adx.mdi < adx.pdi - 3) return {...NONE(votes), filterFailed:'ADX напрямок: бичачий'};
+
+  // Ф5: ATR — ринок рухається
   if(!atr) return NONE(votes);
   const atrPct = atr/lastC*100;
-  if(atrPct < 0.05) return {...NONE(votes), filterFailed:'ATR занадто низький (немає руху)'};
-  if(atrPct > 8.0)  return {...NONE(votes), filterFailed:'ATR занадто високий (хаос)'};
+  if(atrPct < 0.03) return {...NONE(votes), filterFailed:'ATR: ринок стоїть'};
+  if(atrPct > 10.0) return {...NONE(votes), filterFailed:'ATR: екстремальна волатильність'};
 
-  // Ф5: Свічковий патерн підтверджено
+  // Ф6: Свічковий патерн (залишаємо — важливий для точності)
   const pattern = candlePattern(arr, dir);
   if(!pattern.ok) return {...NONE(votes), filterFailed:'Немає свічкового патерну'};
-  reasons.push(`Патерн: ${pattern.name}`);
+  reasons.push(`📊 ${pattern.name}`);
 
-  // Ф6: Нахил тренду відповідає напрямку
-  if(dir==='BUY'  && trend < 0.008) return {...NONE(votes), filterFailed:'Тренд не підтверджує BUY'};
-  if(dir==='SELL' && trend > -0.008) return {...NONE(votes), filterFailed:'Тренд не підтверджує SELL'};
-
-  // Ф7: Нуль протилежних голосів (сигнал без суперечностей)
-  const oppV = dir==='BUY' ? sellV : buyV;
-  if(oppV > 0) return {...NONE(votes), filterFailed:`${oppV} протилежних голоси`};
-
-  // ══ БОНУС: RSI дивергенція ══
+  // ══ БОНУС: дивергенція і тренд ══
   const diverg = calcRSIDivergence(closes, arr, dir);
-  if(diverg){ reasons.push('RSI дивергенція ✓'); }
+  if(diverg) reasons.push('RSI дивергенція ✓');
 
-  // ══ РОЗРАХУНОК ВПЕВНЕНОСТІ ══
-  let conf = 82;                                      // база
-  if(maxV === 5)             conf += 8;               // всі 5 голосів
-  if(adx.adx > 35)           conf += 4;               // сильний тренд
-  if(atrPct > 0.15 && atrPct < 3.0) conf += 3;       // здорова волатильність
-  if(diverg)                 conf += 4;               // дивергенція
-  if(Math.abs(trend) > 0.08) conf += 3;               // крутий нахил
+  // ══ ВПЕВНЕНІСТЬ — base залежить від кількості голосів ══
+  let conf = maxV===5 ? 88 : maxV===4 ? 84 : 78;
+  if(adx.adx > 30)           conf += 4;
+  if(atrPct > 0.1 && atrPct < 3.0) conf += 3;
+  if(diverg)                 conf += 5;
+  const oppV = dir==='BUY' ? sellV : buyV;
+  if(oppV === 0)             conf += 4;   // бонус якщо немає протилежних
   conf = Math.min(conf, 97);
 
   return {dir, conf, reasons, votes, filterFailed:'', pattern: pattern.name};
@@ -1676,8 +1670,7 @@ function runSignalEngine(){
 
 function emitSignal(pair, score, price){
   totalSignals++;
-  if(score.conf>=82) trueSignals++;
-  // voteCount already set above
+  if(score.conf>=75) trueSignals++;
 
   const voteCount = score.dir==='BUY' ? score.votes.buy : score.votes.sell;
   const sig = {
