@@ -3,141 +3,142 @@ const https = require('https');
 // ═══════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════
-const TOKEN   = process.env.BOT_TOKEN  || '8724717803:AAF3ab0NpEKCCdXN6RsetQuAxB8r5SgpUTk';
-const CHAT_ID = process.env.CHAT_ID    || '5554286686';
-const SCAN_INTERVAL_MS = 60_000; // scan every 60 seconds
+const TOKEN      = process.env.BOT_TOKEN   || '8724717803:AAF3ab0NpEKCCdXN6RsetQuAxB8r5SgpUTk';
+const CHAT_ID    = process.env.CHAT_ID     || '5554286686';
+const TD_KEY     = process.env.TD_KEY      || 'bdc80edc66f04dfa93602228f2a6a88d';
+const SCAN_EVERY = 90_000; // 90 секунд між сканами
 
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
-let autoMode    = false;
-let scanTimer   = null;
-let lastSigTime = {};     // sym+tf -> timestamp
-let prices      = {};     // sym -> { price, base, vol }
-let candles     = {};     // sym -> tf -> [{o,h,l,c,t}]
-let offset      = 0;      // Telegram polling offset
+let autoMode      = false;
+let scanTimer     = null;
+let offset        = 0;
 let currentExpiry = '5m';
 let currentTF     = '5m';
-let sentSignalCount = 0;
+let sentCount     = 0;
+let lastSigTime   = {};
+let candleCache   = {};   // sym -> tf -> candles[]
+let lastFetch     = {};   // sym+tf -> timestamp
 
 // ═══════════════════════════════════════════════════════
-// FOREX & OTC PAIRS
+// PAIRS — реальні Forex символи для Twelve Data
 // ═══════════════════════════════════════════════════════
 const FIN_PAIRS = [
-  {sym:'GBPJPY',name:'GBP/JPY',base:191.50,vol:0.00025},
-  {sym:'EURJPY',name:'EUR/JPY',base:163.20,vol:0.00022},
-  {sym:'AUDCAD',name:'AUD/CAD',base:0.9020, vol:0.00018},
-  {sym:'AUDCHF',name:'AUD/CHF',base:0.5780, vol:0.00018},
-  {sym:'AUDJPY',name:'AUD/JPY',base:99.50,  vol:0.00022},
-  {sym:'AUDUSD',name:'AUD/USD',base:0.6520, vol:0.00015},
-  {sym:'CADCHF',name:'CAD/CHF',base:0.6590, vol:0.00018},
-  {sym:'CADJPY',name:'CAD/JPY',base:111.20, vol:0.00022},
-  {sym:'CHFJPY',name:'CHF/JPY',base:168.40, vol:0.00022},
-  {sym:'EURCAD',name:'EUR/CAD',base:1.4720, vol:0.00020},
-  {sym:'EURCHF',name:'EUR/CHF',base:0.9620, vol:0.00015},
-  {sym:'EURUSD',name:'EUR/USD',base:1.0855, vol:0.00012},
-  {sym:'GBPAUD',name:'GBP/AUD',base:1.9720, vol:0.00025},
-  {sym:'GBPCAD',name:'GBP/CAD',base:1.7220, vol:0.00022},
-  {sym:'GBPCHF',name:'GBP/CHF',base:1.1340, vol:0.00020},
-  {sym:'GBPUSD',name:'GBP/USD',base:1.2690, vol:0.00015},
-  {sym:'USDCAD',name:'USD/CAD',base:1.3620, vol:0.00012},
-  {sym:'USDCHF',name:'USD/CHF',base:0.8850, vol:0.00012},
-  {sym:'USDJPY',name:'USD/JPY',base:151.50, vol:0.00015},
-  {sym:'EURAUD',name:'EUR/AUD',base:1.6540, vol:0.00022},
-  {sym:'EURGBP',name:'EUR/GBP',base:0.8560, vol:0.00012},
+  {sym:'GBP/JPY', name:'GBP/JPY', td:'GBP/JPY'},
+  {sym:'EUR/JPY', name:'EUR/JPY', td:'EUR/JPY'},
+  {sym:'AUD/CAD', name:'AUD/CAD', td:'AUD/CAD'},
+  {sym:'AUD/CHF', name:'AUD/CHF', td:'AUD/CHF'},
+  {sym:'AUD/JPY', name:'AUD/JPY', td:'AUD/JPY'},
+  {sym:'AUD/USD', name:'AUD/USD', td:'AUD/USD'},
+  {sym:'CAD/CHF', name:'CAD/CHF', td:'CAD/CHF'},
+  {sym:'CAD/JPY', name:'CAD/JPY', td:'CAD/JPY'},
+  {sym:'CHF/JPY', name:'CHF/JPY', td:'CHF/JPY'},
+  {sym:'EUR/CAD', name:'EUR/CAD', td:'EUR/CAD'},
+  {sym:'EUR/CHF', name:'EUR/CHF', td:'EUR/CHF'},
+  {sym:'EUR/USD', name:'EUR/USD', td:'EUR/USD'},
+  {sym:'GBP/AUD', name:'GBP/AUD', td:'GBP/AUD'},
+  {sym:'GBP/CAD', name:'GBP/CAD', td:'GBP/CAD'},
+  {sym:'GBP/CHF', name:'GBP/CHF', td:'GBP/CHF'},
+  {sym:'GBP/USD', name:'GBP/USD', td:'GBP/USD'},
+  {sym:'USD/CAD', name:'USD/CAD', td:'USD/CAD'},
+  {sym:'USD/CHF', name:'USD/CHF', td:'USD/CHF'},
+  {sym:'USD/JPY', name:'USD/JPY', td:'USD/JPY'},
+  {sym:'EUR/AUD', name:'EUR/AUD', td:'EUR/AUD'},
+  {sym:'EUR/GBP', name:'EUR/GBP', td:'EUR/GBP'},
 ];
 
+// OTC — симуляція на базі реальних FIN цін (OTC не торгується на відкритих біржах)
 const OTC_PAIRS = [
-  {sym:'AUDCAD_OTC',name:'AUD/CAD',base:0.9020, vol:0.00022},
-  {sym:'AUDCHF_OTC',name:'AUD/CHF',base:0.5780, vol:0.00022},
-  {sym:'AUDJPY_OTC',name:'AUD/JPY',base:99.50,  vol:0.00025},
-  {sym:'AUDUSD_OTC',name:'AUD/USD',base:0.6520, vol:0.00018},
-  {sym:'CADJPY_OTC',name:'CAD/JPY',base:111.20, vol:0.00025},
-  {sym:'CADCHF_OTC',name:'CAD/CHF',base:0.6590, vol:0.00022},
-  {sym:'CHFJPY_OTC',name:'CHF/JPY',base:168.40, vol:0.00025},
-  {sym:'EURJPY_OTC',name:'EUR/JPY',base:163.20, vol:0.00025},
-  {sym:'EURUSD_OTC',name:'EUR/USD',base:1.0855, vol:0.00015},
-  {sym:'EURGBP_OTC',name:'EUR/GBP',base:0.8560, vol:0.00015},
-  {sym:'EURCHF_OTC',name:'EUR/CHF',base:0.9620, vol:0.00018},
-  {sym:'EURAUD_OTC',name:'EUR/AUD',base:1.6540, vol:0.00025},
-  {sym:'GBPJPY_OTC',name:'GBP/JPY',base:191.50, vol:0.00030},
-  {sym:'GBPUSD_OTC',name:'GBP/USD',base:1.2690, vol:0.00018},
-  {sym:'GBPAUD_OTC',name:'GBP/AUD',base:1.9720, vol:0.00030},
-  {sym:'NZDJPY_OTC',name:'NZD/JPY',base:91.20,  vol:0.00025},
-  {sym:'NZDUSD_OTC',name:'NZD/USD',base:0.6020, vol:0.00018},
-  {sym:'USDCAD_OTC',name:'USD/CAD',base:1.3620, vol:0.00015},
-  {sym:'USDCHF_OTC',name:'USD/CHF',base:0.8850, vol:0.00015},
-  {sym:'USDJPY_OTC',name:'USD/JPY',base:151.50, vol:0.00018},
-  {sym:'USDMXN_OTC',name:'USD/MXN',base:17.20,  vol:0.00040},
-  {sym:'USDINR_OTC',name:'USD/INR',base:83.20,  vol:0.00020},
-  {sym:'USDMYR_OTC',name:'USD/MYR',base:4.720,  vol:0.00025},
-  {sym:'USDSGD_OTC',name:'USD/SGD',base:1.3420, vol:0.00015},
-  {sym:'USDTHB_OTC',name:'USD/THB',base:35.20,  vol:0.00025},
-  {sym:'USDBRL_OTC',name:'USD/BRL',base:5.020,  vol:0.00040},
-  {sym:'USDPHP_OTC',name:'USD/PHP',base:56.20,  vol:0.00030},
-  {sym:'USDCNH_OTC',name:'USD/CNH',base:7.240,  vol:0.00015},
-  {sym:'UAHUSD_OTC',name:'UAH/USD',base:0.0267, vol:0.00040},
-  {sym:'EURNZD_OTC',name:'EUR/NZD',base:1.7820, vol:0.00025},
-  {sym:'EURTRY_OTC',name:'EUR/TRY',base:35.20,  vol:0.00060},
+  {sym:'GBP/JPY_OTC', name:'GBP/JPY', base:'GBP/JPY', otc:true},
+  {sym:'EUR/JPY_OTC', name:'EUR/JPY', base:'EUR/JPY', otc:true},
+  {sym:'EUR/USD_OTC', name:'EUR/USD', base:'EUR/USD', otc:true},
+  {sym:'GBP/USD_OTC', name:'GBP/USD', base:'GBP/USD', otc:true},
+  {sym:'USD/JPY_OTC', name:'USD/JPY', base:'USD/JPY', otc:true},
+  {sym:'AUD/USD_OTC', name:'AUD/USD', base:'AUD/USD', otc:true},
+  {sym:'USD/CAD_OTC', name:'USD/CAD', base:'USD/CAD', otc:true},
+  {sym:'USD/CHF_OTC', name:'USD/CHF', base:'USD/CHF', otc:true},
+  {sym:'CAD/JPY_OTC', name:'CAD/JPY', base:'CAD/JPY', otc:true},
+  {sym:'CHF/JPY_OTC', name:'CHF/JPY', base:'CHF/JPY', otc:true},
 ];
 
-const ALL_PAIRS = [...FIN_PAIRS, ...OTC_PAIRS];
-
 // ═══════════════════════════════════════════════════════
-// PRICE SIMULATION (realistic forex micro-movement)
+// TWELVE DATA — реальні свічки
 // ═══════════════════════════════════════════════════════
-function tfMs(tf) {
-  return {'1m':60e3,'5m':300e3,'15m':900e3,'1h':3600e3,'4h':14400e3}[tf] || 300e3;
+function tdInterval(tf) {
+  return {'1m':'1min','5m':'5min','15m':'15min','1h':'1h','4h':'4h'}[tf] || '5min';
 }
 
-function initPrices() {
-  ALL_PAIRS.forEach(p => {
-    if (prices[p.sym]) return;
-    prices[p.sym] = { price: p.base, base: p.base, vol: p.vol };
-    candles[p.sym] = {};
-    ['1m','5m','15m','1h','4h'].forEach(tf => {
-      candles[p.sym][tf] = [];
-      let price = p.base * (0.985 + Math.random() * 0.03);
-      for (let i = 0; i < 200; i++) {
-        const v = p.vol * (0.4 + Math.random() * 2.5);
-        const bias = (Math.random() - 0.495) * 0.2;
-        const o = price;
-        const c = o * (1 + (Math.random() - 0.5) * v * 2 + bias * v);
-        const h = Math.max(o, c) * (1 + Math.random() * v * 0.6);
-        const l = Math.min(o, c) * (1 - Math.random() * v * 0.6);
-        candles[p.sym][tf].push({ o, h, l, c, t: Date.now() - (200 - i) * tfMs(tf) });
-        price = c;
-      }
-      prices[p.sym].price = price;
-    });
-  });
-  console.log(`✅ Initialized ${ALL_PAIRS.length} pairs`);
-}
-
-function tickPrices() {
-  ALL_PAIRS.forEach(p => {
-    const st = prices[p.sym];
-    const tick = (Math.random() - 0.499) * st.vol * st.price * 0.5;
-    st.price += tick;
-    const now = Date.now();
-    ['1m','5m','15m','1h','4h'].forEach(tf => {
-      const arr = candles[p.sym][tf];
-      if (!arr || !arr.length) return;
-      const last = arr[arr.length - 1];
-      if (now - last.t >= tfMs(tf)) {
-        arr.push({ o: last.c, h: st.price, l: st.price, c: st.price, t: now });
-        if (arr.length > 300) arr.shift();
-      } else {
-        last.c = st.price;
-        last.h = Math.max(last.h, st.price);
-        last.l = Math.min(last.l, st.price);
-      }
-    });
+function httpsGet(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, res => {
+      let raw = '';
+      res.on('data', c => raw += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(raw)); }
+        catch { reject(new Error('JSON parse error')); }
+      });
+    }).on('error', reject);
   });
 }
 
+async function fetchCandles(tdSym, tf, outputSize = 100) {
+  const interval = tdInterval(tf);
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(tdSym)}&interval=${interval}&outputsize=${outputSize}&apikey=${TD_KEY}&format=JSON`;
+  try {
+    const data = await httpsGet(url);
+    if (data.status === 'error' || !data.values) {
+      console.warn(`[TD] Error for ${tdSym}: ${data.message || 'no values'}`);
+      return null;
+    }
+    // Twelve Data повертає від нових до старих — перевертаємо
+    const candles = data.values.reverse().map(v => ({
+      o: parseFloat(v.open),
+      h: parseFloat(v.high),
+      l: parseFloat(v.low),
+      c: parseFloat(v.close),
+      t: new Date(v.datetime).getTime()
+    }));
+    return candles;
+  } catch (e) {
+    console.warn(`[TD] Fetch error ${tdSym}:`, e.message);
+    return null;
+  }
+}
+
+// Кешуємо свічки — не більше 1 запиту на пару кожні 5 хвилин
+async function getCandles(pair, tf) {
+  const sym = pair.otc ? pair.base : pair.sym;
+  const key = sym + tf;
+  const now = Date.now();
+  const ttl = {'1m':60e3,'5m':300e3,'15m':900e3,'1h':3600e3,'4h':14400e3}[tf] || 300e3;
+
+  if (candleCache[key] && (now - (lastFetch[key]||0)) < ttl) {
+    return candleCache[key];
+  }
+
+  // Для OTC — беремо базову FIN пару і додаємо мікро-шум
+  const tdSym = pair.otc ? pair.base : pair.td || pair.sym;
+  console.log(`[TD] Fetching ${tdSym} ${tf}...`);
+  const candles = await fetchCandles(tdSym, tf);
+  if (!candles || candles.length < 30) return candleCache[key] || null;
+
+  // OTC: додаємо мінімальний шум щоб імітувати OTC спред
+  if (pair.otc) {
+    const noise = 0.0001;
+    candles.forEach(c => {
+      const n = (Math.random() - 0.5) * noise;
+      c.o += n; c.h += n; c.l += n; c.c += n;
+    });
+  }
+
+  candleCache[key] = candles;
+  lastFetch[key] = now;
+  return candles;
+}
+
 // ═══════════════════════════════════════════════════════
-// TECHNICAL INDICATORS
+// ТЕХНІЧНІ ІНДИКАТОРИ
 // ═══════════════════════════════════════════════════════
 function calcEMA(data, period) {
   const k = 2 / (period + 1);
@@ -177,8 +178,8 @@ function calcMACD(data) {
   const n = valid.length - 1;
   return {
     macd: valid[n], signal: sig[n], hist: valid[n] - sig[n],
-    crossUp:   valid[n-1] < sig[n-1] && valid[n] > sig[n],
-    crossDown: valid[n-1] > sig[n-1] && valid[n] < sig[n]
+    crossUp:   valid[n-1] < sig[n-1] && valid[n] >= sig[n],
+    crossDown: valid[n-1] > sig[n-1] && valid[n] <= sig[n]
   };
 }
 
@@ -189,7 +190,7 @@ function calcBB(data, period = 20, mult = 2) {
   const m = sl.reduce((a, b) => a + b) / period;
   const std = Math.sqrt(sl.map(x => (x - m) ** 2).reduce((a, b) => a + b) / period);
   const lastU = m + mult * std, lastL = m - mult * std;
-  return { lastU, lastL, lastM: m, valid: lastU > lastL && (lastU - lastL) / m > 0.0001 };
+  return { lastU, lastL, lastM: m, valid: lastU > lastL && std > 0 };
 }
 
 function calcStochRSI(data, period = 14) {
@@ -215,33 +216,33 @@ function calcATR(arr, period = 14) {
 
 function calcADX(arr, period = 14) {
   if (arr.length < period * 3) return { adx: 0, pdi: 0, mdi: 0 };
-  const data = arr.slice(-150);
+  const data = arr.slice(-120);
   const pDM = [], mDM = [], tr = [];
   for (let i = 1; i < data.length; i++) {
     const up = data[i].h - data[i-1].h, dn = data[i-1].l - data[i].l;
     pDM.push(up > dn && up > 0 ? up : 0);
     mDM.push(dn > up && dn > 0 ? dn : 0);
-    tr.push(Math.max(data[i].h - data[i].l, Math.abs(data[i].h - data[i-1].c), Math.abs(data[i].l - data[i-1].c)));
+    tr.push(Math.max(data[i].h-data[i].l, Math.abs(data[i].h-data[i-1].c), Math.abs(data[i].l-data[i-1].c)));
   }
   const ws = (arr, p) => {
     if (arr.length < p) return [];
     let v = arr.slice(0, p).reduce((a, b) => a + b);
     const r = [v];
-    for (let i = p; i < arr.length; i++) { v = v - v / p + arr[i]; r.push(v); }
+    for (let i = p; i < arr.length; i++) { v = v - v/p + arr[i]; r.push(v); }
     return r;
   };
   const sTR = ws(tr, period), sPDM = ws(pDM, period), sMDM = ws(mDM, period);
   if (!sTR.length) return { adx: 0, pdi: 0, mdi: 0 };
-  const pdi = sPDM.map((v, i) => sTR[i] > 0 ? Math.min(v / sTR[i] * 100, 100) : 0);
-  const mdi = sMDM.map((v, i) => sTR[i] > 0 ? Math.min(v / sTR[i] * 100, 100) : 0);
-  const dx  = pdi.map((v, i) => (v + mdi[i]) > 0 ? Math.abs(v - mdi[i]) / (v + mdi[i]) * 100 : 0);
+  const pdi = sPDM.map((v, i) => sTR[i] > 0 ? Math.min(v/sTR[i]*100, 100) : 0);
+  const mdi = sMDM.map((v, i) => sTR[i] > 0 ? Math.min(v/sTR[i]*100, 100) : 0);
+  const dx  = pdi.map((v, i) => (v+mdi[i]) > 0 ? Math.abs(v-mdi[i])/(v+mdi[i])*100 : 0);
   const adxArr = ws(dx, period);
   const n = adxArr.length - 1;
-  return { adx: Math.min(adxArr[n] / period, 100), pdi: pdi.at(-1), mdi: mdi.at(-1) };
+  return { adx: Math.min(adxArr[n]/period, 100), pdi: pdi.at(-1), mdi: mdi.at(-1) };
 }
 
 // ═══════════════════════════════════════════════════════
-// CANDLE PATTERNS
+// СВІЧКОВІ ПАТЕРНИ
 // ═══════════════════════════════════════════════════════
 function candlePattern(arr, dir) {
   if (arr.length < 4) return { ok: false, name: '' };
@@ -251,40 +252,41 @@ function candlePattern(arr, dir) {
   const atr10 = arr.slice(-10).reduce((s, x) => s + (x.h - x.l), 0) / 10;
 
   if (dir === 'BUY') {
-    if (bear(p1) && bull(c) && c.c > p1.o && c.o < p1.c && body(c) > body(p1) * 0.9)
+    if (bear(p1) && bull(c) && c.c > p1.o && c.o < p1.c && body(c) > body(p1) * 0.85)
       return { ok: true, name: 'Бичаче поглинання' };
-    const lw = Math.min(c.o, c.c) - c.l, uw = c.h - Math.max(c.o, c.c);
-    if (lw > body(c) * 2 && uw < body(c) * 0.6 && lw > atr10 * 0.3)
+    const lw = Math.min(c.o,c.c)-c.l, uw = c.h-Math.max(c.o,c.c);
+    if (lw > body(c)*2 && uw < body(c)*0.6 && lw > atr10*0.3)
       return { ok: true, name: 'Молот 🔨' };
     if (bull(c) && bull(p1) && bull(p2) && c.c > p1.c && p1.c > p2.c)
       return { ok: true, name: 'Три бики ✅' };
-    if (lw > body(c) * 3 && c.c > (c.h + c.l) / 2)
+    if (lw > body(c)*3 && c.c > (c.h+c.l)/2)
       return { ok: true, name: 'Пін-бар (підтримка)' };
-    if (bull(c) && body(c) > atr10 * 0.6)
+    if (bull(c) && body(c) > atr10*0.55)
       return { ok: true, name: 'Сильна бичача свічка' };
   }
   if (dir === 'SELL') {
-    if (bull(p1) && bear(c) && c.c < p1.o && c.o > p1.c && body(c) > body(p1) * 0.9)
+    if (bull(p1) && bear(c) && c.c < p1.o && c.o > p1.c && body(c) > body(p1) * 0.85)
       return { ok: true, name: 'Ведмеже поглинання' };
-    const uw2 = c.h - Math.max(c.o, c.c), lw2 = Math.min(c.o, c.c) - c.l;
-    if (uw2 > body(c) * 2 && lw2 < body(c) * 0.6 && uw2 > atr10 * 0.3)
+    const uw2 = c.h-Math.max(c.o,c.c), lw2 = Math.min(c.o,c.c)-c.l;
+    if (uw2 > body(c)*2 && lw2 < body(c)*0.6 && uw2 > atr10*0.3)
       return { ok: true, name: 'Зірка падіння 💫' };
     if (bear(c) && bear(p1) && bear(p2) && c.c < p1.c && p1.c < p2.c)
       return { ok: true, name: 'Три ведмеді ✅' };
-    if (uw2 > body(c) * 3 && c.c < (c.h + c.l) / 2)
+    if (uw2 > body(c)*3 && c.c < (c.h+c.l)/2)
       return { ok: true, name: 'Пін-бар (спротив)' };
-    if (bear(c) && body(c) > atr10 * 0.6)
+    if (bear(c) && body(c) > atr10*0.55)
       return { ok: true, name: 'Сильна ведмежа свічка' };
   }
   return { ok: false, name: '' };
 }
 
 // ═══════════════════════════════════════════════════════
-// SIGNAL SCORE ENGINE
+// СИГНАЛЬНИЙ ДВИЖОК — реальні дані
 // ═══════════════════════════════════════════════════════
-function getScore(sym, tf) {
-  const arr = (candles[sym] || {})[tf] || [];
-  if (arr.length < 80) return null;
+async function getScore(pair, tf) {
+  const arr = await getCandles(pair, tf);
+  if (!arr || arr.length < 50) return null;
+
   const closes = arr.map(c => c.c);
   const rsi    = calcRSI(closes);
   const macd   = calcMACD(closes);
@@ -295,87 +297,113 @@ function getScore(sym, tf) {
   const e50    = calcEMA(closes, 50).at(-1);
   const atr    = calcATR(arr);
   const adx    = calcADX(arr);
-  const last   = closes.at(-1), prev = closes.at(-2);
+  const last   = closes.at(-1);
+  const prev   = closes.at(-2);
 
   let bV = 0, sV = 0;
   const bR = [], sR = [];
 
   // 1. RSI
   if (rsi !== null) {
-    if (rsi <= 33) { bV++; bR.push(`RSI ${rsi.toFixed(0)} — перепродано`); }
-    else if (rsi >= 67) { sV++; sR.push(`RSI ${rsi.toFixed(0)} — перекуплено`); }
+    if (rsi <= 32)      { bV++; bR.push(`RSI ${rsi.toFixed(1)} — перепродано`); }
+    else if (rsi >= 68) { sV++; sR.push(`RSI ${rsi.toFixed(1)} — перекуплено`); }
   }
-  // 2. MACD cross
-  if (macd.crossUp)   { bV++; bR.push('MACD ↑ перетин'); }
-  if (macd.crossDown) { sV++; sR.push('MACD ↓ перетин'); }
-  if (!macd.crossUp   && macd.hist > 0 && macd.macd < 0) { bV++; bR.push('MACD імпульс ↑'); }
-  if (!macd.crossDown && macd.hist < 0 && macd.macd > 0) { sV++; sR.push('MACD імпульс ↓'); }
-  // 3. BB
+  // 2. MACD
+  if (macd.crossUp)   { bV++; bR.push('MACD ↑ перетин сигнальної'); }
+  if (macd.crossDown) { sV++; sR.push('MACD ↓ перетин сигнальної'); }
+  if (!macd.crossUp   && macd.hist > 0 && macd.macd !== null && macd.macd < 0) { bV++; bR.push('MACD: імпульс вгору від нуля'); }
+  if (!macd.crossDown && macd.hist < 0 && macd.macd !== null && macd.macd > 0) { sV++; sR.push('MACD: імпульс вниз від нуля'); }
+
+  // 3. Bollinger Bands
   if (bb.valid) {
-    const pos  = Math.max(0, Math.min(1, (last - bb.lastL) / (bb.lastU - bb.lastL)));
-    const pp   = Math.max(0, Math.min(1, (prev - bb.lastL) / (bb.lastU - bb.lastL)));
-    if (pos <= 0.12 && pos >= pp - 0.02) { bV++; bR.push(`BB нижня зона (${(pos*100).toFixed(0)}%)`); }
-    if (pos >= 0.88 && pos <= pp + 0.02) { sV++; sR.push(`BB верхня зона (${(pos*100).toFixed(0)}%)`); }
+    const range = bb.lastU - bb.lastL;
+    const pos  = Math.max(0, Math.min(1, (last - bb.lastL) / range));
+    const pp   = Math.max(0, Math.min(1, (prev - bb.lastL) / range));
+    if (pos <= 0.12 && pos >= pp - 0.03) { bV++; bR.push(`BB нижня зона (${(pos*100).toFixed(0)}%)`); }
+    if (pos >= 0.88 && pos <= pp + 0.03) { sV++; sR.push(`BB верхня зона (${(pos*100).toFixed(0)}%)`); }
   }
+
   // 4. EMA
   if (e9 && e21 && e50) {
-    if (e9 > e21 && last > e50) { bV++; bR.push('EMA: 9>21, ціна вище 50'); }
-    if (e9 < e21 && last < e50) { sV++; sR.push('EMA: 9<21, ціна нижче 50'); }
+    if (e9 > e21 && last > e50) { bV++; bR.push('EMA: 9>21, ціна вище EMA50'); }
+    if (e9 < e21 && last < e50) { sV++; sR.push('EMA: 9<21, ціна нижче EMA50'); }
   }
-  // 5. Stoch
-  if (stoch.k <= 25) { bV++; bR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона покупок`); }
-  else if (stoch.k >= 75) { sV++; sR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона продаж`); }
+
+  // 5. Stoch RSI
+  if (stoch.k <= 22)      { bV++; bR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона покупок`); }
+  else if (stoch.k >= 78) { sV++; sR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона продаж`); }
 
   const maxV = Math.max(bV, sV);
   if (maxV < 3) return null;
   const dir = bV >= 3 ? 'BUY' : 'SELL';
   const reasons = dir === 'BUY' ? [...bR] : [...sR];
 
-  // Filters
+  // Фільтр: 3 голоси — потрібен MACD
   if (maxV === 3 && !reasons.some(r => r.includes('MACD'))) return null;
+
+  // ADX фільтр
   if (adx.adx < 15) return null;
   if (dir === 'BUY'  && adx.pdi < adx.mdi - 5) return null;
   if (dir === 'SELL' && adx.mdi < adx.pdi - 5) return null;
+
+  // ATR фільтр
   if (!atr) return null;
   const atrPct = atr / last * 100;
-  if (atrPct < 0.01 || atrPct > 12) return null;
+  if (atrPct < 0.005 || atrPct > 5) return null;
 
+  // Свічковий патерн
   const pat = candlePattern(arr, dir);
   if (!pat.ok) return null;
   reasons.push(`📊 ${pat.name}`);
 
-  let conf = maxV === 5 ? 88 : maxV === 4 ? 83 : 77;
-  if (adx.adx > 30) conf += 4;
-  if (atrPct > 0.02 && atrPct < 3) conf += 3;
+  // Впевненість
+  let conf = maxV === 5 ? 89 : maxV === 4 ? 84 : 78;
+  if (adx.adx > 28) conf += 4;
+  if (atrPct > 0.01 && atrPct < 1.5) conf += 3;
   const opp = dir === 'BUY' ? sV : bV;
   if (opp === 0) conf += 4;
   conf = Math.min(conf, 97);
 
-  return { dir, conf, reasons, pattern: pat.name, votes: maxV };
+  return {
+    dir, conf, reasons,
+    pattern: pat.name,
+    votes: maxV,
+    price: last,
+    rsi: rsi?.toFixed(1),
+    adx: adx.adx.toFixed(0)
+  };
 }
 
 // ═══════════════════════════════════════════════════════
-// SCAN ALL PAIRS → best signal
+// СКАН ПАРИ
 // ═══════════════════════════════════════════════════════
-function scanAllPairs(tf = currentTF) {
+async function scanPairs(pairs, tf) {
   let best = null, bestConf = 0;
-  ALL_PAIRS.forEach(p => {
-    const now  = Date.now();
-    const key  = p.sym + tf;
-    const last = lastSigTime[key] || 0;
-    if (now - last < tfMs(tf) * 4) return; // cooldown
-    const score = getScore(p.sym, tf);
-    if (!score) return;
-    if (score.conf > bestConf) {
-      bestConf = score.conf;
-      best = { pair: p, score, price: prices[p.sym]?.price || p.base };
+  // Обмежуємо до 8 пар за раз щоб не перевищити API ліміт
+  const toScan = pairs.slice(0, 8);
+  for (const p of toScan) {
+    const key = p.sym + tf;
+    const now = Date.now();
+    const cooldownMs = {'1m':4*60e3,'5m':20*60e3,'15m':60*60e3,'1h':4*3600e3}[tf] || 20*60e3;
+    if ((now - (lastSigTime[key]||0)) < cooldownMs) continue;
+    try {
+      const score = await getScore(p, tf);
+      if (!score) continue;
+      if (score.conf > bestConf) {
+        bestConf = score.conf;
+        best = { pair: p, score, price: score.price };
+      }
+    } catch(e) {
+      console.warn(`[SCAN] Error ${p.sym}:`, e.message);
     }
-  });
+    // Пауза між запитами щоб не флудити API
+    await new Promise(r => setTimeout(r, 500));
+  }
   return best;
 }
 
 // ═══════════════════════════════════════════════════════
-// TIME HELPERS
+// ФОРМАТУВАННЯ ЧАСУ
 // ═══════════════════════════════════════════════════════
 function addMins(d, m) {
   const r = new Date(d.getTime() + m * 60000);
@@ -390,45 +418,54 @@ function entryTimeStr() {
 
 function reentryTimes() {
   const n = new Date();
-  const mins = { '1m':1,'5m':5,'10m':10,'15m':15,'30m':30,'1h':60 }[currentExpiry] || 5;
-  return [ addMins(n, mins + 1), addMins(n, mins * 2 + 1) ];
+  const mins = {'1m':1,'5m':5,'10m':10,'15m':15,'30m':30,'1h':60}[currentExpiry] || 5;
+  return [addMins(n, mins+1), addMins(n, mins*2+1)];
+}
+
+function fmtPrice(price, sym) {
+  if (!price) return '—';
+  if (sym.includes('JPY')) return price.toFixed(3);
+  return price.toFixed(5);
 }
 
 // ═══════════════════════════════════════════════════════
-// BUILD TELEGRAM MESSAGE
+// TELEGRAM ПОВІДОМЛЕННЯ
 // ═══════════════════════════════════════════════════════
-function buildMsg(pair, score, price) {
+function buildMsg(pair, score) {
   const isBuy   = score.dir === 'BUY';
   const entry   = entryTimeStr();
   const [re1, re2] = reentryTimes();
-  const typeFlag = pair.sym.includes('OTC') ? '🔄 OTC' : '📈 FIN';
-  const arrow    = isBuy ? '🚀' : '📉';
-  const circle   = isBuy ? '🟢' : '🔴';
-  const dirText  = isBuy ? '▲ КУПИТИ' : '▼ ПРОДАТИ';
-  const confBar  = '█'.repeat(Math.round(score.conf / 10)) + '░'.repeat(10 - Math.round(score.conf / 10));
+  const isOTC   = pair.otc ? '🔄 OTC' : '📈 FIN';
+  const arrow   = isBuy ? '🚀' : '📉';
+  const circle  = isBuy ? '🟢' : '🔴';
+  const dirText = isBuy ? '▲ КУПИТИ' : '▼ ПРОДАТИ';
+  const filled  = Math.round(score.conf / 10);
+  const bar     = '█'.repeat(filled) + '░'.repeat(10 - filled);
 
-  return `${arrow} *${score.dir}* · ${typeFlag}
+  return `${arrow} *${score.dir}* · ${isOTC}
 ━━━━━━━━━━━━━━━━━━
 🏦 *${pair.name}*
 ⏱ Експірація: *${currentExpiry.toUpperCase()}*
 🎯 Точка входу: *${entry}*
 ${circle} *${dirText}*
 
-▲ *Додатковий вхід (мартингейл):*
+▲ *Додатковий вхід:*
 1️⃣ Рівень о ${re1}
 2️⃣ Рівень о ${re2}
 ━━━━━━━━━━━━━━━━━━
 ⚡ Впевненість: *${score.conf}%*
-${confBar}
-✅ Підтверджень: ${score.votes}/5
+${bar}
+✅ Підтверджень: *${score.votes}/5*
+💰 Ціна: \`${fmtPrice(score.price, pair.sym)}\`
 📊 Патерн: _${score.pattern}_
+📈 RSI: ${score.rsi} | ADX: ${score.adx}
 
 _Підстави:_
 ${score.reasons.map(r => `• ${r}`).join('\n')}`;
 }
 
 // ═══════════════════════════════════════════════════════
-// TELEGRAM API HELPERS
+// TELEGRAM API
 // ═══════════════════════════════════════════════════════
 function tgRequest(method, body) {
   return new Promise((resolve, reject) => {
@@ -441,65 +478,54 @@ function tgRequest(method, body) {
     }, res => {
       let raw = '';
       res.on('data', c => raw += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(raw)); }
-        catch { resolve({}); }
-      });
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve({}); } });
     });
     req.on('error', reject);
     req.write(data); req.end();
   });
 }
 
-async function sendMsg(text, chatId = CHAT_ID, extra = {}) {
+async function sendMsg(text, chatId = CHAT_ID) {
   try {
-    await tgRequest('sendMessage', {
-      chat_id: chatId,
-      text,
-      parse_mode: 'Markdown',
-      ...extra
-    });
-  } catch (e) { console.error('TG send error:', e.message); }
+    await tgRequest('sendMessage', { chat_id: chatId, text, parse_mode: 'Markdown' });
+  } catch(e) { console.error('[TG] Send error:', e.message); }
 }
 
 async function getUpdates() {
   try {
-    const res = await tgRequest('getUpdates', { offset, timeout: 30, limit: 10 });
+    const res = await tgRequest('getUpdates', { offset, timeout: 25, limit: 10 });
     return res.result || [];
   } catch { return []; }
 }
 
 // ═══════════════════════════════════════════════════════
-// BOT COMMANDS
+// КОМАНДИ
 // ═══════════════════════════════════════════════════════
-const MENU = `
-*SIGNAL PRO — Команди:*
+const HELP = `
+🤖 *SIGNAL PRO — Команди:*
 
-/auto — 🤖 Увімкнути/вимкнути авторежим
-/signal — 📡 Найкращий сигнал зараз
-/fin — 📈 Сканувати FIN пари
-/otc — 🔄 Сканувати OTC пари
-/expiry — ⏱ Встановити експірацію
-/tf — 🕐 Встановити таймфрейм
-/pairs — 📋 Список пар
-/status — ℹ️ Статус бота
-/stop — ⏹ Зупинити авторежим
+/auto — увімкнути\\вимкнути авторежим
+/signal — 📡 кращий FIN сигнал зараз
+/otc — 🔄 кращий OTC сигнал зараз
+/setexpiry 5m — ⏱ змінити експірацію
+/settf 5m — 🕐 змінити таймфрейм
+/status — ℹ️ статус бота
+/stop — зупинити авторежим
 `;
 
 async function handleCommand(msg) {
-  const text    = msg.text || '';
-  const chatId  = msg.chat.id.toString();
-  const cmd     = text.split(' ')[0].toLowerCase().replace('@signalprobot','');
-
+  const text   = (msg.text || '').trim();
+  const chatId = msg.chat.id.toString();
+  const cmd    = text.split(' ')[0].toLowerCase();
   console.log(`[CMD] ${chatId}: ${text}`);
 
   if (cmd === '/start' || cmd === '/help') {
-    await sendMsg(`🤖 *SIGNAL PRO Bot запущено!*\n\nАвтоматичний сигнальний бот для Forex & OTC.\n${MENU}`, chatId);
+    await sendMsg(`🟢 *SIGNAL PRO Bot активний!*\n\n📡 Реальні дані: *Twelve Data*\n📊 Пар: ${FIN_PAIRS.length} FIN + ${OTC_PAIRS.length} OTC\n${HELP}`, chatId);
 
   } else if (cmd === '/auto') {
     autoMode = !autoMode;
     if (autoMode) {
-      await sendMsg('🤖 *АВТО РЕЖИМ УВІМКНЕНО*\n\nБот сканує всі пари і надсилає сигнали автоматично.\n\nЩоб зупинити: /stop', chatId);
+      await sendMsg('🤖 *АВТОРЕЖИМ УВІМКНЕНО*\n\nСканую реальний ринок. Сигнали надходитимуть автоматично.\n\n/stop — зупинити', chatId);
       startAutoScan(chatId);
     } else {
       stopAutoScan();
@@ -507,171 +533,121 @@ async function handleCommand(msg) {
     }
 
   } else if (cmd === '/stop') {
-    autoMode = false;
-    stopAutoScan();
+    autoMode = false; stopAutoScan();
     await sendMsg('⏹ *Авторежим зупинено.*', chatId);
 
   } else if (cmd === '/signal' || cmd === '/fin') {
-    await sendMsg('🔍 Сканую FIN пари...', chatId);
-    const best = scanBestFrom(FIN_PAIRS);
+    await sendMsg('🔍 Сканую FIN ринок (реальні дані)...', chatId);
+    const best = await scanPairs(FIN_PAIRS, currentTF);
     if (best) {
       lastSigTime[best.pair.sym + currentTF] = Date.now();
-      sentSignalCount++;
-      await sendMsg(buildMsg(best.pair, best.score, best.price), chatId);
+      sentCount++;
+      await sendMsg(buildMsg(best.pair, best.score), chatId);
     } else {
-      await sendMsg('⊘ Немає чітких сигналів зараз.\n\nСпробуйте змінити таймфрейм (/tf) або пізніше.', chatId);
+      await sendMsg('⊘ *Немає чітких сигналів зараз.*\n\nРинок у флеті або недостатньо підтверджень.\nСпробуйте /settf 15m або пізніше.', chatId);
     }
 
   } else if (cmd === '/otc') {
     await sendMsg('🔍 Сканую OTC пари...', chatId);
-    const best = scanBestFrom(OTC_PAIRS);
+    const best = await scanPairs(OTC_PAIRS, currentTF);
     if (best) {
       lastSigTime[best.pair.sym + currentTF] = Date.now();
-      sentSignalCount++;
-      await sendMsg(buildMsg(best.pair, best.score, best.price), chatId);
+      sentCount++;
+      await sendMsg(buildMsg(best.pair, best.score), chatId);
     } else {
-      await sendMsg('⊘ Немає чітких OTC сигналів зараз.', chatId);
+      await sendMsg('⊘ *Немає OTC сигналів зараз.*', chatId);
     }
-
-  } else if (cmd === '/expiry') {
-    const opts = ['1m','5m','10m','15m','30m','1h'];
-    await sendMsg(
-      `⏱ *Поточна експірація:* ${currentExpiry.toUpperCase()}\n\nОберіть:\n${opts.map((e,i) => `/${i+1}exp \`${e.toUpperCase()}\``).join('\n')}\n\nАбо відправте: /setexpiry 5m`,
-      chatId
-    );
 
   } else if (cmd === '/setexpiry') {
     const val = text.split(' ')[1];
     if (['1m','5m','10m','15m','30m','1h'].includes(val)) {
       currentExpiry = val;
-      await sendMsg(`✅ Експірація встановлена: *${val.toUpperCase()}*`, chatId);
+      await sendMsg(`✅ Експірація: *${val.toUpperCase()}*`, chatId);
     } else {
-      await sendMsg('❌ Невірне значення. Приклад: `/setexpiry 5m`', chatId);
+      await sendMsg('Приклад: `/setexpiry 5m`\nДоступно: 1m, 5m, 10m, 15m, 30m, 1h', chatId);
     }
-
-  } else if (cmd === '/tf') {
-    const opts = ['1m','5m','15m','1h','4h'];
-    await sendMsg(
-      `🕐 *Поточний таймфрейм:* ${currentTF.toUpperCase()}\n\nВстановити: /settf 5m`,
-      chatId
-    );
 
   } else if (cmd === '/settf') {
     const val = text.split(' ')[1];
     if (['1m','5m','15m','1h','4h'].includes(val)) {
       currentTF = val;
+      // Очищаємо кеш при зміні TF
+      candleCache = {};
       await sendMsg(`✅ Таймфрейм: *${val.toUpperCase()}*`, chatId);
     } else {
-      await sendMsg('❌ Невірне значення. Приклад: `/settf 15m`', chatId);
+      await sendMsg('Приклад: `/settf 15m`\nДоступно: 1m, 5m, 15m, 1h, 4h', chatId);
     }
 
-  } else if (cmd === '/pairs') {
-    const finList = FIN_PAIRS.map(p => p.name).join(', ');
-    const otcList = OTC_PAIRS.slice(0, 20).map(p => p.name).join(', ') + '...';
-    await sendMsg(
-      `📋 *FIN пари (${FIN_PAIRS.length}):*\n${finList}\n\n*OTC пари (${OTC_PAIRS.length}):*\n${otcList}`,
-      chatId
-    );
-
   } else if (cmd === '/status') {
+    const cacheSize = Object.keys(candleCache).length;
     await sendMsg(
       `ℹ️ *SIGNAL PRO статус:*\n\n` +
-      `🤖 Авторежим: ${autoMode ? '✅ АКТИВНИЙ' : '❌ вимкнено'}\n` +
-      `⏱ Експірація: ${currentExpiry.toUpperCase()}\n` +
-      `🕐 Таймфрейм: ${currentTF.toUpperCase()}\n` +
-      `📡 Надіслано сигналів: ${sentSignalCount}\n` +
-      `📊 Пар завантажено: ${ALL_PAIRS.length}\n` +
-      `⏰ Uptime: ${Math.round(process.uptime() / 60)} хв`,
+      `🤖 Авторежим: ${autoMode ? '✅ активний' : '❌ вимкнено'}\n` +
+      `📡 Джерело: Twelve Data (реальний ринок)\n` +
+      `⏱ Експірація: *${currentExpiry.toUpperCase()}*\n` +
+      `🕐 Таймфрейм: *${currentTF.toUpperCase()}*\n` +
+      `📨 Надіслано сигналів: ${sentCount}\n` +
+      `💾 Кеш свічок: ${cacheSize} пар\n` +
+      `⏰ Uptime: ${Math.round(process.uptime()/60)} хв`,
       chatId
     );
 
   } else {
-    await sendMsg(`Невідома команда. Напишіть /help`, chatId);
+    await sendMsg('Невідома команда. /help', chatId);
   }
 }
 
 // ═══════════════════════════════════════════════════════
-// AUTO SCAN LOOP
+// АВТОРЕЖИМ
 // ═══════════════════════════════════════════════════════
-function scanBestFrom(pairs) {
-  let best = null, bestConf = 0;
-  pairs.forEach(p => {
-    const key  = p.sym + currentTF;
-    const last = lastSigTime[key] || 0;
-    if (Date.now() - last < tfMs(currentTF) * 4) return;
-    const score = getScore(p.sym, currentTF);
-    if (!score) return;
-    if (score.conf > bestConf) {
-      bestConf = score.conf;
-      best = { pair: p, score, price: prices[p.sym]?.price || p.base };
-    }
-  });
-  return best;
-}
-
-let autoScanChatId = CHAT_ID;
+let autoScanChat = CHAT_ID;
 
 function startAutoScan(chatId) {
-  autoScanChatId = chatId || CHAT_ID;
+  autoScanChat = chatId || CHAT_ID;
   clearInterval(scanTimer);
   scanTimer = setInterval(async () => {
     if (!autoMode) { clearInterval(scanTimer); return; }
-    tickPrices(); // update simulation
-    // Scan all pairs, send best
-    const best = scanBestFrom(ALL_PAIRS);
+    console.log('[AUTO] Scanning...');
+    // Чергуємо FIN і OTC
+    const allPairs = [...FIN_PAIRS, ...OTC_PAIRS];
+    const best = await scanPairs(allPairs, currentTF);
     if (best) {
       lastSigTime[best.pair.sym + currentTF] = Date.now();
-      sentSignalCount++;
+      sentCount++;
       console.log(`[SIGNAL] ${best.score.dir} ${best.pair.name} ${best.score.conf}%`);
-      await sendMsg(buildMsg(best.pair, best.score, best.price), autoScanChatId);
+      await sendMsg(buildMsg(best.pair, best.score), autoScanChat);
     } else {
-      console.log('[SCAN] No signals this round');
+      console.log('[AUTO] No signals this round');
     }
-  }, SCAN_INTERVAL_MS);
-  console.log(`[AUTO] Started scanning every ${SCAN_INTERVAL_MS/1000}s`);
+  }, SCAN_EVERY);
 }
 
 function stopAutoScan() {
   clearInterval(scanTimer);
   scanTimer = null;
-  console.log('[AUTO] Stopped');
 }
 
 // ═══════════════════════════════════════════════════════
-// PRICE TICK LOOP (every 5s)
-// ═══════════════════════════════════════════════════════
-setInterval(tickPrices, 5000);
-
-// ═══════════════════════════════════════════════════════
-// POLLING LOOP
+// POLLING
 // ═══════════════════════════════════════════════════════
 async function poll() {
   const updates = await getUpdates();
   for (const upd of updates) {
     offset = upd.update_id + 1;
-    if (upd.message?.text) {
-      await handleCommand(upd.message);
-    }
+    if (upd.message?.text) await handleCommand(upd.message);
   }
-  setTimeout(poll, 500);
+  setTimeout(poll, 800);
 }
 
 // ═══════════════════════════════════════════════════════
-// BOOT
+// СТАРТ
 // ═══════════════════════════════════════════════════════
-console.log('🚀 SIGNAL PRO Bot starting...');
-initPrices();
-
-// Send startup message
+console.log('🚀 SIGNAL PRO Bot starting (Twelve Data LIVE)...');
 sendMsg(
   `🟢 *SIGNAL PRO Bot запущено!*\n\n` +
-  `📊 Завантажено ${ALL_PAIRS.length} пар\n` +
-  `⏱ Експірація: ${currentExpiry.toUpperCase()}\n\n` +
+  `📡 Джерело котировок: *Twelve Data* (реальний ринок)\n` +
+  `📊 FIN пар: ${FIN_PAIRS.length} | OTC пар: ${OTC_PAIRS.length}\n` +
+  `⏱ Експірація: ${currentExpiry.toUpperCase()} | TF: ${currentTF.toUpperCase()}\n\n` +
   `Команди: /help\nАвтосигнали: /auto`
-).then(() => {
-  console.log('✅ Startup message sent');
-  poll(); // start polling
-}).catch(e => {
-  console.error('❌ Startup error:', e.message);
-  poll();
-});
+).then(() => { console.log('✅ Ready'); poll(); })
+ .catch(e  => { console.error('❌', e.message); poll(); });
