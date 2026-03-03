@@ -50,16 +50,60 @@ const FIN_PAIRS = [
 
 // OTC — симуляція на базі реальних FIN цін (OTC не торгується на відкритих біржах)
 const OTC_PAIRS = [
-  {sym:'GBP/JPY_OTC', name:'GBP/JPY', base:'GBP/JPY', otc:true},
-  {sym:'EUR/JPY_OTC', name:'EUR/JPY', base:'EUR/JPY', otc:true},
-  {sym:'EUR/USD_OTC', name:'EUR/USD', base:'EUR/USD', otc:true},
-  {sym:'GBP/USD_OTC', name:'GBP/USD', base:'GBP/USD', otc:true},
-  {sym:'USD/JPY_OTC', name:'USD/JPY', base:'USD/JPY', otc:true},
-  {sym:'AUD/USD_OTC', name:'AUD/USD', base:'AUD/USD', otc:true},
-  {sym:'USD/CAD_OTC', name:'USD/CAD', base:'USD/CAD', otc:true},
-  {sym:'USD/CHF_OTC', name:'USD/CHF', base:'USD/CHF', otc:true},
-  {sym:'CAD/JPY_OTC', name:'CAD/JPY', base:'CAD/JPY', otc:true},
-  {sym:'CHF/JPY_OTC', name:'CHF/JPY', base:'CHF/JPY', otc:true},
+  {sym:'AUD/CAD_OTC', name:'AUD/CAD OTC', base:'AUD/CAD', otc:true},
+  {sym:'AUD/CHF_OTC', name:'AUD/CHF OTC', base:'AUD/CHF', otc:true},
+  {sym:'BHD/CNY_OTC', name:'BHD/CNY OTC', base:'USD/CNH', otc:true},
+  {sym:'CAD/CHF_OTC', name:'CAD/CHF OTC', base:'CAD/CHF', otc:true},
+  {sym:'CHF/JPY_OTC', name:'CHF/JPY OTC', base:'CHF/JPY', otc:true},
+  {sym:'EUR/HUF_OTC', name:'EUR/HUF OTC', base:'EUR/USD', otc:true},
+  {sym:'EUR/JPY_OTC', name:'EUR/JPY OTC', base:'EUR/JPY', otc:true},
+  {sym:'EUR/TRY_OTC', name:'EUR/TRY OTC', base:'EUR/USD', otc:true},
+  {sym:'GBP/AUD_OTC', name:'GBP/AUD OTC', base:'GBP/AUD', otc:true},
+  {sym:'GBP/JPY_OTC', name:'GBP/JPY OTC', base:'GBP/JPY', otc:true},
+  {sym:'GBP/USD_OTC', name:'GBP/USD OTC', base:'GBP/USD', otc:true},
+  {sym:'LBP/USD_OTC', name:'LBP/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'NGN/USD_OTC', name:'NGN/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'USD/BDT_OTC', name:'USD/BDT OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/COP_OTC', name:'USD/COP OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/DZD_OTC', name:'USD/DZD OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/INR_OTC', name:'USD/INR OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/MYR_OTC', name:'USD/MYR OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/SGD_OTC', name:'USD/SGD OTC', base:'USD/CHF', otc:true},
+  {sym:'YER/USD_OTC', name:'YER/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'USD/PKR_OTC', name:'USD/PKR OTC', base:'USD/CAD', otc:true},
+  {sym:'OMR/CNY_OTC', name:'OMR/CNY OTC', base:'USD/CNH', otc:true},
+  {sym:'AUD/USD_OTC', name:'AUD/USD OTC', base:'AUD/USD', otc:true},
+  {sym:'CAD/JPY_OTC', name:'CAD/JPY OTC', base:'CAD/JPY', otc:true},
+  {sym:'USD/EGP_OTC', name:'USD/EGP OTC', base:'USD/CAD', otc:true},
+  {sym:'TND/USD_OTC', name:'TND/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'UAH/USD_OTC', name:'UAH/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'AUD/JPY_OTC', name:'AUD/JPY OTC', base:'AUD/JPY', otc:true},
+  {sym:'USD/CAD_OTC', name:'USD/CAD OTC', base:'USD/CAD', otc:true},
+  {sym:'NZD/JPY_OTC', name:'NZD/JPY OTC', base:'USD/JPY', otc:true},
+  {sym:'KES/USD_OTC', name:'KES/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'USD/IDR_OTC', name:'USD/IDR OTC', base:'USD/CAD', otc:true},
+  {sym:'CHF/NOK_OTC', name:'CHF/NOK OTC', base:'USD/CHF', otc:true},
+  {sym:'USD/JPY_OTC', name:'USD/JPY OTC', base:'USD/JPY', otc:true},
+  {sym:'NZD/USD_OTC', name:'NZD/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'EUR/USD_OTC', name:'EUR/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'QAR/CNY_OTC', name:'QAR/CNY OTC', base:'USD/CNH', otc:true},
+  {sym:'JOD/CNY_OTC', name:'JOD/CNY OTC', base:'USD/CNH', otc:true},
+  {sym:'SAR/CNY_OTC', name:'SAR/CNY OTC', base:'USD/CNH', otc:true},
+  {sym:'USD/THB_OTC', name:'USD/THB OTC', base:'USD/CAD', otc:true},
+  {sym:'ZAR/USD_OTC', name:'ZAR/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'USD/ARS_OTC', name:'USD/ARS OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/MXN_OTC', name:'USD/MXN OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/CHF_OTC', name:'USD/CHF OTC', base:'USD/CHF', otc:true},
+  {sym:'MAD/USD_OTC', name:'MAD/USD OTC', base:'EUR/USD', otc:true},
+  {sym:'EUR/NZD_OTC', name:'EUR/NZD OTC', base:'EUR/GBP', otc:true},
+  {sym:'EUR/CHF_OTC', name:'EUR/CHF OTC', base:'EUR/CHF', otc:true},
+  {sym:'EUR/GBP_OTC', name:'EUR/GBP OTC', base:'EUR/GBP', otc:true},
+  {sym:'AUD/NZD_OTC', name:'AUD/NZD OTC', base:'AUD/USD', otc:true},
+  {sym:'USD/CLP_OTC', name:'USD/CLP OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/BRL_OTC', name:'USD/BRL OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/VND_OTC', name:'USD/VND OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/PHP_OTC', name:'USD/PHP OTC', base:'USD/CAD', otc:true},
+  {sym:'USD/CNH_OTC', name:'USD/CNH OTC', base:'USD/CNH', otc:true},
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -380,7 +424,7 @@ async function getScore(pair, tf) {
 async function scanPairs(pairs, tf) {
   let best = null, bestConf = 0;
   // Обмежуємо до 8 пар за раз щоб не перевищити API ліміт
-  const toScan = pairs.slice(0, 8);
+  const toScan = pairs;
   for (const p of toScan) {
     const key = p.sym + tf;
     const now = Date.now();
@@ -505,6 +549,7 @@ const HELP = `
 🤖 *SIGNAL PRO — Команди:*
 
 /auto — увімкнути\\вимкнути авторежим
+/manual GBP/JPY — ручний прогноз по обраному активу
 /signal — 📡 кращий FIN сигнал зараз
 /otc — 🔄 кращий OTC сигнал зараз
 /setexpiry 5m — ⏱ змінити експірацію
@@ -564,8 +609,40 @@ async function handleCommand(msg) {
       currentExpiry = val;
       await sendMsg(`✅ Експірація: *${val.toUpperCase()}*`, chatId);
     } else {
-      await sendMsg('Приклад: `/setexpiry 5m`\nДоступно: 1m, 5m, 10m, 15m, 30m, 1h', chatId);
+      await sendMsg('Приклад: `/setexpiry 5m`\nДоступно: 1m, 5m, 10m, 15m, 30m, 1h\n(діапазон: 1-30 хв або 1 година)', chatId);
     }
+
+  } else if (cmd === '/manual') {
+    const rawPair = text.slice('/manual'.length).trim();
+    if (!rawPair) {
+      await sendMsg('Приклад: `/manual GBP/JPY` або `/manual EUR/USD OTC`', chatId);
+      return;
+    }
+
+    const norm = rawPair.toUpperCase().replace(/\s+/g, ' ').trim();
+    const isOtcReq = norm.endsWith(' OTC');
+    const clean = norm.replace(/ OTC$/, '');
+    const universe = isOtcReq ? OTC_PAIRS : FIN_PAIRS;
+    const pair = universe.find(p => {
+      const nm = p.name.toUpperCase();
+      if (isOtcReq) return nm === `${clean} OTC`;
+      return nm === clean || nm === `${clean} OTC`;
+    });
+
+    if (!pair) {
+      await sendMsg(`⊘ Актив *${rawPair}* не знайдено у списку ${isOtcReq ? 'OTC' : 'FIN'}.`, chatId);
+      return;
+    }
+
+    await sendMsg(`🧭 Ручний режим: аналізую *${pair.name}*...`, chatId);
+    const score = await getScore(pair, currentTF);
+    if (!score) {
+      await sendMsg(`⊘ Немає чіткого сигналу по *${pair.name}* зараз.`, chatId);
+      return;
+    }
+    lastSigTime[pair.sym + currentTF] = Date.now();
+    sentCount++;
+    await sendMsg(buildMsg(pair, score), chatId);
 
   } else if (cmd === '/settf') {
     const val = text.split(' ')[1];
