@@ -5,8 +5,8 @@ const express = require('express');
 // CONFIG
 // ═══════════════════════════════════════════════════════
 // IMPORTANT: set BOT_TOKEN in environment variables. Do NOT hardcode tokens.
-const TOKEN   = process.env.BOT_TOKEN;
-const CHAT_ID = process.env.CHAT_ID || null; // optional default chat for startup message
+const TOKEN   = process.env.BOT_TOKEN=8724717803:AAF3ab0NpEKCCdXN6RsetQuAxB8r5SgpUTk
+const CHAT_ID = process.env.CHAT_ID=5554286686 // optional default chat for startup message
 const PORT    = Number(process.env.PORT || 3000);
 const SCAN_INTERVAL_MS = 60_000; // scan every 60 seconds
 
