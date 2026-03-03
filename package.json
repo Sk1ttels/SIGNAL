@@ -1,0 +1,12 @@
+{
+  "name": "signal-pro-tg-bot",
+  "version": "1.0.0",
+  "description": "Signal PRO — Forex & OTC Telegram Bot",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
