@@ -1,10 +1,13 @@
 const https = require('https');
+const express = require('express');
 
 // ═══════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════
-const TOKEN   = process.env.BOT_TOKEN  || '8724717803:AAF3ab0NpEKCCdXN6RsetQuAxB8r5SgpUTk';
-const CHAT_ID = process.env.CHAT_ID    || '5554286686';
+// IMPORTANT: set BOT_TOKEN in environment variables. Do NOT hardcode tokens.
+const TOKEN   = process.env.BOT_TOKEN;
+const CHAT_ID = process.env.CHAT_ID || null; // optional default chat for startup message
+const PORT    = Number(process.env.PORT || 3000);
 const SCAN_INTERVAL_MS = 60_000; // scan every 60 seconds
 
 // ═══════════════════════════════════════════════════════
@@ -19,6 +22,11 @@ let offset      = 0;      // Telegram polling offset
 let currentExpiry = '5m';
 let currentTF     = '5m';
 let sentSignalCount = 0;
+
+if (!TOKEN) {
+  console.error('❌ Missing BOT_TOKEN env. Set BOT_TOKEN before запуск.');
+  process.exit(1);
+}
 
 // ═══════════════════════════════════════════════════════
 // FOREX & OTC PAIRS
@@ -394,6 +402,13 @@ function reentryTimes() {
   return [ addMins(n, mins + 1), addMins(n, mins * 2 + 1) ];
 }
 
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
 // ═══════════════════════════════════════════════════════
 // BUILD TELEGRAM MESSAGE
 // ═══════════════════════════════════════════════════════
@@ -407,24 +422,25 @@ function buildMsg(pair, score, price) {
   const dirText  = isBuy ? '▲ КУПИТИ' : '▼ ПРОДАТИ';
   const confBar  = '█'.repeat(Math.round(score.conf / 10)) + '░'.repeat(10 - Math.round(score.conf / 10));
 
-  return `${arrow} *${score.dir}* · ${typeFlag}
-━━━━━━━━━━━━━━━━━━
-🏦 *${pair.name}*
-⏱ Експірація: *${currentExpiry.toUpperCase()}*
-🎯 Точка входу: *${entry}*
-${circle} *${dirText}*
+  const reasons = (score.reasons || []).slice(0, 6).map(r => `• ${escapeHtml(r)}`).join('<br>');
 
-▲ *Додатковий вхід (мартингейл):*
-1️⃣ Рівень о ${re1}
-2️⃣ Рівень о ${re2}
+  return `${arrow} <b>${escapeHtml(score.dir)}</b> · <b>${typeFlag}</b>
 ━━━━━━━━━━━━━━━━━━
-⚡ Впевненість: *${score.conf}%*
-${confBar}
-✅ Підтверджень: ${score.votes}/5
-📊 Патерн: _${score.pattern}_
+🏦 <b>${escapeHtml(pair.name)}</b>
+⏱ Експірація: <b>${escapeHtml(currentExpiry.toUpperCase())}</b>
+🎯 Точка входу: <b><code>${escapeHtml(entry)}</code></b>
+${circle} <b>${escapeHtml(dirText)}</b>
 
-_Підстави:_
-${score.reasons.map(r => `• ${r}`).join('\n')}`;
+▲ <b>Додатковий вхід (мартингейл):</b>
+1️⃣ Рівень о <code>${escapeHtml(re1)}</code>
+2️⃣ Рівень о <code>${escapeHtml(re2)}</code>
+━━━━━━━━━━━━━━━━━━
+⚡ Впевненість: <b>${score.conf}%</b>
+<code>${confBar}</code>
+✅ Підтверджень: <b>${score.votes}/5</b>
+📊 Патерн: <i>${escapeHtml(score.pattern || '—')}</i>
+
+<b>Підстави:</b><br>${reasons || '—'}`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -456,8 +472,8 @@ async function sendMsg(text, chatId = CHAT_ID, extra = {}) {
     await tgRequest('sendMessage', {
       chat_id: chatId,
       text,
-      parse_mode: 'Markdown',
-      ...extra
+      ...extra,
+      parse_mode: extra.parse_mode || 'HTML'
     });
   } catch (e) { console.error('TG send error:', e.message); }
 }
@@ -486,6 +502,64 @@ const MENU = `
 /stop — ⏹ Зупинити авторежим
 `;
 
+function mainKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '🔥 Best', callback_data: 'best:ALL' },
+        { text: '📈 FIN', callback_data: 'best:FIN' },
+        { text: '🔄 OTC', callback_data: 'best:OTC' },
+      ],
+      [
+        { text: '🤖 Auto ON/OFF', callback_data: 'auto:toggle' },
+        { text: '⚙️ Налаштування', callback_data: 'settings:open' },
+      ],
+      [
+        { text: '📋 Пари', callback_data: 'pairs:list' },
+        { text: 'ℹ️ Статус', callback_data: 'status:show' },
+      ]
+    ]
+  };
+}
+
+function settingsKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '⏱ Exp 1m', callback_data: 'setexp:1m' },
+        { text: '⏱ Exp 5m', callback_data: 'setexp:5m' },
+        { text: '⏱ Exp 15m', callback_data: 'setexp:15m' },
+        { text: '⏱ Exp 30m', callback_data: 'setexp:30m' },
+        { text: '⏱ Exp 1h', callback_data: 'setexp:1h' },
+      ],
+      [
+        { text: '🕐 TF 1m', callback_data: 'settf:1m' },
+        { text: '🕐 TF 5m', callback_data: 'settf:5m' },
+        { text: '🕐 TF 15m', callback_data: 'settf:15m' },
+        { text: '🕐 TF 1h', callback_data: 'settf:1h' },
+        { text: '🕐 TF 4h', callback_data: 'settf:4h' },
+      ],
+      [
+        { text: '⬅️ Назад', callback_data: 'menu:open' }
+      ]
+    ]
+  };
+}
+
+async function sendMenu(chatId) {
+  await sendMsg(
+    `🤖 <b>SIGNAL PRO</b>
+<i>Сигнали Forex & OTC</i>
+
+<b>Поточні налаштування</b>
+⏱ Exp: <code>${currentExpiry.toUpperCase()}</code>
+🕐 TF: <code>${currentTF.toUpperCase()}</code>
+🤖 Auto: <b>${autoMode ? 'ON' : 'OFF'}</b>`,
+    chatId,
+    { reply_markup: mainKeyboard(), parse_mode: 'HTML' }
+  );
+}
+
 async function handleCommand(msg) {
   const text    = msg.text || '';
   const chatId  = msg.chat.id.toString();
@@ -494,12 +568,12 @@ async function handleCommand(msg) {
   console.log(`[CMD] ${chatId}: ${text}`);
 
   if (cmd === '/start' || cmd === '/help') {
-    await sendMsg(`🤖 *SIGNAL PRO Bot запущено!*\n\nАвтоматичний сигнальний бот для Forex & OTC.\n${MENU}`, chatId);
+    await sendMenu(chatId);
 
   } else if (cmd === '/auto') {
     autoMode = !autoMode;
     if (autoMode) {
-      await sendMsg('🤖 *АВТО РЕЖИМ УВІМКНЕНО*\n\nБот сканує всі пари і надсилає сигнали автоматично.\n\nЩоб зупинити: /stop', chatId);
+      await sendMsg('🤖 <b>АВТО РЕЖИМ УВІМКНЕНО</b>\n\nБот сканує всі пари і надсилає сигнали автоматично.\n\nЩоб зупинити: /stop', chatId);
       startAutoScan(chatId);
     } else {
       stopAutoScan();
@@ -509,7 +583,7 @@ async function handleCommand(msg) {
   } else if (cmd === '/stop') {
     autoMode = false;
     stopAutoScan();
-    await sendMsg('⏹ *Авторежим зупинено.*', chatId);
+    await sendMsg('⏹ <b>Авторежим зупинено.</b>', chatId);
 
   } else if (cmd === '/signal' || cmd === '/fin') {
     await sendMsg('🔍 Сканую FIN пари...', chatId);
@@ -517,9 +591,9 @@ async function handleCommand(msg) {
     if (best) {
       lastSigTime[best.pair.sym + currentTF] = Date.now();
       sentSignalCount++;
-      await sendMsg(buildMsg(best.pair, best.score, best.price), chatId);
+      await sendMsg(buildMsg(best.pair, best.score, best.price), chatId, { reply_markup: mainKeyboard() });
     } else {
-      await sendMsg('⊘ Немає чітких сигналів зараз.\n\nСпробуйте змінити таймфрейм (/tf) або пізніше.', chatId);
+      await sendMsg('⊘ Немає чітких сигналів зараз.\n\nСпробуй змінити таймфрейм (/tf) або пізніше.', chatId, { reply_markup: mainKeyboard() });
     }
 
   } else if (cmd === '/otc') {
@@ -528,65 +602,153 @@ async function handleCommand(msg) {
     if (best) {
       lastSigTime[best.pair.sym + currentTF] = Date.now();
       sentSignalCount++;
-      await sendMsg(buildMsg(best.pair, best.score, best.price), chatId);
+      await sendMsg(buildMsg(best.pair, best.score, best.price), chatId, { reply_markup: mainKeyboard() });
     } else {
-      await sendMsg('⊘ Немає чітких OTC сигналів зараз.', chatId);
+      await sendMsg('⊘ Немає чітких OTC сигналів зараз.', chatId, { reply_markup: mainKeyboard() });
     }
 
   } else if (cmd === '/expiry') {
     const opts = ['1m','5m','10m','15m','30m','1h'];
     await sendMsg(
-      `⏱ *Поточна експірація:* ${currentExpiry.toUpperCase()}\n\nОберіть:\n${opts.map((e,i) => `/${i+1}exp \`${e.toUpperCase()}\``).join('\n')}\n\nАбо відправте: /setexpiry 5m`,
-      chatId
+      `⏱ <b>Поточна експірація:</b> <code>${currentExpiry.toUpperCase()}</code>\n\nНатисни кнопку або відправ: <code>/setexpiry 5m</code>`,
+      chatId,
+      { reply_markup: settingsKeyboard() }
     );
 
   } else if (cmd === '/setexpiry') {
     const val = text.split(' ')[1];
     if (['1m','5m','10m','15m','30m','1h'].includes(val)) {
       currentExpiry = val;
-      await sendMsg(`✅ Експірація встановлена: *${val.toUpperCase()}*`, chatId);
+      await sendMsg(`✅ Експірація встановлена: <b>${val.toUpperCase()}</b>`, chatId, { reply_markup: mainKeyboard() });
     } else {
-      await sendMsg('❌ Невірне значення. Приклад: `/setexpiry 5m`', chatId);
+      await sendMsg('❌ Невірне значення. Приклад: <code>/setexpiry 5m</code>', chatId, { reply_markup: mainKeyboard() });
     }
 
   } else if (cmd === '/tf') {
     const opts = ['1m','5m','15m','1h','4h'];
     await sendMsg(
-      `🕐 *Поточний таймфрейм:* ${currentTF.toUpperCase()}\n\nВстановити: /settf 5m`,
-      chatId
+      `🕐 <b>Поточний таймфрейм:</b> <code>${currentTF.toUpperCase()}</code>\n\nНатисни кнопку або відправ: <code>/settf 5m</code>`,
+      chatId,
+      { reply_markup: settingsKeyboard() }
     );
 
   } else if (cmd === '/settf') {
     const val = text.split(' ')[1];
     if (['1m','5m','15m','1h','4h'].includes(val)) {
       currentTF = val;
-      await sendMsg(`✅ Таймфрейм: *${val.toUpperCase()}*`, chatId);
+      await sendMsg(`✅ Таймфрейм: <b>${val.toUpperCase()}</b>`, chatId, { reply_markup: mainKeyboard() });
     } else {
-      await sendMsg('❌ Невірне значення. Приклад: `/settf 15m`', chatId);
+      await sendMsg('❌ Невірне значення. Приклад: <code>/settf 15m</code>', chatId, { reply_markup: mainKeyboard() });
     }
 
+  } else if (cmd === '/pair') {
+    const sym = (text.split(' ')[1] || '').toUpperCase();
+    const pair = ALL_PAIRS.find(p => p.sym === sym || p.name.replace('/','') === sym || p.name.replace('/','') + '_OTC' === sym);
+    if (!pair) {
+      return sendMsg('Не знайшов пару. Приклад: <code>/pair EURUSD</code> або <code>/pair EURUSD_OTC</code>', chatId, { reply_markup: mainKeyboard() });
+    }
+    tickPrices();
+    const best = scanBestFrom([pair]);
+    if (!best) return sendMsg('⊘ По цій парі зараз немає чіткого сигналу. Спробуй інший TF.', chatId, { reply_markup: mainKeyboard() });
+    lastSigTime[pair.sym + currentTF] = Date.now();
+    sentSignalCount++;
+    return sendMsg(buildMsg(best.pair, best.score, best.price), chatId, { reply_markup: mainKeyboard() });
+
   } else if (cmd === '/pairs') {
-    const finList = FIN_PAIRS.map(p => p.name).join(', ');
-    const otcList = OTC_PAIRS.slice(0, 20).map(p => p.name).join(', ') + '...';
     await sendMsg(
-      `📋 *FIN пари (${FIN_PAIRS.length}):*\n${finList}\n\n*OTC пари (${OTC_PAIRS.length}):*\n${otcList}`,
-      chatId
+      `📋 <b>Пари</b>\n\n📈 FIN: <b>${FIN_PAIRS.length}</b>\n🔄 OTC: <b>${OTC_PAIRS.length}</b>\n\nХочеш сигнал по конкретній парі — напиши: <code>/pair EURUSD</code>`,
+      chatId,
+      { reply_markup: mainKeyboard() }
     );
 
   } else if (cmd === '/status') {
     await sendMsg(
-      `ℹ️ *SIGNAL PRO статус:*\n\n` +
-      `🤖 Авторежим: ${autoMode ? '✅ АКТИВНИЙ' : '❌ вимкнено'}\n` +
-      `⏱ Експірація: ${currentExpiry.toUpperCase()}\n` +
-      `🕐 Таймфрейм: ${currentTF.toUpperCase()}\n` +
-      `📡 Надіслано сигналів: ${sentSignalCount}\n` +
-      `📊 Пар завантажено: ${ALL_PAIRS.length}\n` +
-      `⏰ Uptime: ${Math.round(process.uptime() / 60)} хв`,
-      chatId
+      `ℹ️ <b>SIGNAL PRO статус</b>\n\n` +
+      `🤖 Auto: <b>${autoMode ? 'ON' : 'OFF'}</b>\n` +
+      `⏱ Exp: <code>${currentExpiry.toUpperCase()}</code>\n` +
+      `🕐 TF: <code>${currentTF.toUpperCase()}</code>\n` +
+      `📨 Сигналів надіслано: <b>${sentSignalCount}</b>\n` +
+      `📊 Пар: <b>${ALL_PAIRS.length}</b>\n` +
+      `⏰ Uptime: <b>${Math.round(process.uptime() / 60)}</b> хв`,
+      chatId,
+      { reply_markup: mainKeyboard() }
     );
 
   } else {
-    await sendMsg(`Невідома команда. Напишіть /help`, chatId);
+    await sendMsg(`Невідома команда. Натисни /start`, chatId, { reply_markup: mainKeyboard() });
+  }
+}
+
+async function answerCb(cbId, text) {
+  try {
+    await tgRequest('answerCallbackQuery', { callback_query_id: cbId, text, show_alert: false });
+  } catch {}
+}
+
+async function handleCallback(cb) {
+  const chatId = cb.message?.chat?.id?.toString();
+  const data = cb.data || '';
+  await answerCb(cb.id, '✅');
+  if (!chatId) return;
+
+  if (data === 'menu:open') {
+    return sendMenu(chatId);
+  }
+
+  if (data === 'auto:toggle') {
+    autoMode = !autoMode;
+    if (autoMode) startAutoScan(chatId); else stopAutoScan();
+    return sendMenu(chatId);
+  }
+
+  if (data === 'settings:open') {
+    return sendMsg(
+      `⚙️ <b>Налаштування</b>\n\n⏱ Exp: <code>${currentExpiry.toUpperCase()}</code>\n🕐 TF: <code>${currentTF.toUpperCase()}</code>`,
+      chatId,
+      { reply_markup: settingsKeyboard() }
+    );
+  }
+
+  if (data.startsWith('setexp:')) {
+    const val = data.split(':')[1];
+    if (['1m','5m','10m','15m','30m','1h'].includes(val)) currentExpiry = val;
+    return sendMenu(chatId);
+  }
+
+  if (data.startsWith('settf:')) {
+    const val = data.split(':')[1];
+    if (['1m','5m','15m','1h','4h'].includes(val)) currentTF = val;
+    return sendMenu(chatId);
+  }
+
+  if (data === 'status:show') {
+    const totalPairs = ALL_PAIRS.length;
+    return sendMsg(
+      `ℹ️ <b>Статус</b>\n\n📊 Пари: <b>${totalPairs}</b>\n⏱ Exp: <code>${currentExpiry.toUpperCase()}</code>\n🕐 TF: <code>${currentTF.toUpperCase()}</code>\n🤖 Auto: <b>${autoMode ? 'ON' : 'OFF'}</b>\n📨 Сигналів надіслано: <b>${sentSignalCount}</b>`,
+      chatId,
+      { reply_markup: mainKeyboard() }
+    );
+  }
+
+  if (data === 'pairs:list') {
+    const finCount = FIN_PAIRS.length;
+    const otcCount = OTC_PAIRS.length;
+    return sendMsg(
+      `📋 <b>Список пар</b>\n\n📈 FIN: <b>${finCount}</b>\n🔄 OTC: <b>${otcCount}</b>\n\nХочеш конкретну — напиши, наприклад: <code>/pair EURUSD</code>`,
+      chatId,
+      { reply_markup: mainKeyboard() }
+    );
+  }
+
+  if (data.startsWith('best:')) {
+    const mode = data.split(':')[1];
+    tickPrices();
+    const pool = mode === 'FIN' ? FIN_PAIRS : mode === 'OTC' ? OTC_PAIRS : ALL_PAIRS;
+    const best = scanBestFrom(pool);
+    if (!best) return sendMsg('⊘ Немає чітких сигналів зараз.', chatId, { reply_markup: mainKeyboard() });
+    lastSigTime[best.pair.sym + currentTF] = Date.now();
+    sentSignalCount++;
+    return sendMsg(buildMsg(best.pair, best.score, best.price), chatId, { reply_markup: mainKeyboard() });
   }
 }
 
@@ -651,6 +813,8 @@ async function poll() {
     offset = upd.update_id + 1;
     if (upd.message?.text) {
       await handleCommand(upd.message);
+    } else if (upd.callback_query) {
+      await handleCallback(upd.callback_query);
     }
   }
   setTimeout(poll, 500);
@@ -662,16 +826,70 @@ async function poll() {
 console.log('🚀 SIGNAL PRO Bot starting...');
 initPrices();
 
-// Send startup message
-sendMsg(
-  `🟢 *SIGNAL PRO Bot запущено!*\n\n` +
-  `📊 Завантажено ${ALL_PAIRS.length} пар\n` +
-  `⏱ Експірація: ${currentExpiry.toUpperCase()}\n\n` +
-  `Команди: /help\nАвтосигнали: /auto`
-).then(() => {
-  console.log('✅ Startup message sent');
-  poll(); // start polling
-}).catch(e => {
-  console.error('❌ Startup error:', e.message);
-  poll();
+// ═══════════════════════════════════════════════════════
+// HTTP API (for site/WebApp) — same logic as bot
+// ═══════════════════════════════════════════════════════
+const app = express();
+app.use(express.json());
+
+app.get('/api/status', (req, res) => {
+  res.json({
+    ok: true,
+    autoMode,
+    expiry: currentExpiry,
+    tf: currentTF,
+    pairs: { fin: FIN_PAIRS.length, otc: OTC_PAIRS.length, all: ALL_PAIRS.length },
+    sentSignalCount,
+    uptimeSec: Math.round(process.uptime())
+  });
 });
+
+app.get('/api/pairs', (req, res) => {
+  const market = String(req.query.market || 'ALL').toUpperCase();
+  const list = market === 'FIN' ? FIN_PAIRS : market === 'OTC' ? OTC_PAIRS : ALL_PAIRS;
+  res.json({ ok: true, market, pairs: list.map(p => ({ sym: p.sym, name: p.name })) });
+});
+
+app.get('/api/best', (req, res) => {
+  const market = String(req.query.market || 'ALL').toUpperCase();
+  const tf = String(req.query.tf || currentTF);
+  const exp = String(req.query.expiry || currentExpiry);
+  if (['1m','5m','15m','1h','4h'].includes(tf)) currentTF = tf;
+  if (['1m','5m','10m','15m','30m','1h'].includes(exp)) currentExpiry = exp;
+  tickPrices();
+  const pool = market === 'FIN' ? FIN_PAIRS : market === 'OTC' ? OTC_PAIRS : ALL_PAIRS;
+  const best = scanBestFrom(pool);
+  if (!best) return res.json({ ok: true, signal: null });
+  res.json({
+    ok: true,
+    signal: {
+      sym: best.pair.sym,
+      pair: best.pair.name,
+      market: best.pair.sym.includes('OTC') ? 'OTC' : 'FIN',
+      dir: best.score.dir,
+      conf: best.score.conf,
+      votes: best.score.votes,
+      pattern: best.score.pattern,
+      reasons: best.score.reasons,
+      expiry: currentExpiry,
+      tf: currentTF,
+      entry: entryTimeStr(),
+      price: best.price
+    }
+  });
+});
+
+app.listen(PORT, () => console.log(`🌐 API listening on :${PORT}`));
+
+if (CHAT_ID) {
+  sendMsg(
+    `🟢 <b>SIGNAL PRO Bot запущено!</b>\n\n` +
+    `📊 Завантажено <b>${ALL_PAIRS.length}</b> пар\n` +
+    `⏱ Exp: <code>${currentExpiry.toUpperCase()}</code>\n\n` +
+    `Натисни /start щоб відкрити меню`,
+    CHAT_ID,
+    { reply_markup: mainKeyboard() }
+  ).catch(e => console.error('Startup message error:', e.message));
+}
+
+poll();
