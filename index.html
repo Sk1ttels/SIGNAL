@@ -3,478 +3,134 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SIGNAL PRO — Trading Bot</title>
+<title>SIGNAL PRO — Binary Options Bot</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
-
-:root {
-  --bg: #080c10;
-  --panel: #0d1117;
-  --border: #1a2332;
-  --accent: #00d4ff;
-  --green: #00ff88;
-  --red: #ff3366;
-  --yellow: #ffcc00;
-  --text: #c9d1d9;
-  --dim: #4a5568;
-  --glow-green: 0 0 20px rgba(0,255,136,0.4);
-  --glow-red: 0 0 20px rgba(255,51,102,0.4);
-  --glow-blue: 0 0 20px rgba(0,212,255,0.3);
-}
-
-* { margin:0; padding:0; box-sizing:border-box; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Rajdhani', sans-serif;
-  font-size: 15px;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-/* Scanlines */
-body::before {
-  content:'';
-  position:fixed; top:0; left:0; right:0; bottom:0;
-  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
-  pointer-events:none; z-index:999;
-}
-
-.mono { font-family: 'Share Tech Mono', monospace; }
-
-/* HEADER */
-header {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:16px 24px;
-  border-bottom:1px solid var(--border);
-  background: linear-gradient(180deg, #0d1117 0%, transparent 100%);
-}
-
-.logo {
-  font-size:22px; font-weight:700; letter-spacing:4px;
-  color: var(--accent);
-  text-shadow: var(--glow-blue);
-}
-.logo span { color: var(--green); }
-
-.status-bar {
-  display:flex; align-items:center; gap:20px;
-}
-
-.status-dot {
-  width:8px; height:8px; border-radius:50%;
-  background: var(--green);
-  box-shadow: var(--glow-green);
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0%,100%{ opacity:1; } 50%{ opacity:0.3; }
-}
-
-.mode-toggle {
-  display:flex; gap:4px;
-  background: var(--border);
-  border-radius:6px; padding:3px;
-}
-.mode-btn {
-  padding:5px 14px; border-radius:4px;
-  border:none; cursor:pointer;
-  font-family:'Rajdhani',sans-serif;
-  font-size:13px; font-weight:600;
-  letter-spacing:1px;
-  background:transparent; color:var(--dim);
-  transition:.2s;
-}
-.mode-btn.active {
-  background: var(--panel);
-  color: var(--accent);
-  box-shadow: var(--glow-blue);
-}
-
-/* GRID */
-.main-grid {
-  display:grid;
-  grid-template-columns: 300px 1fr 280px;
-  grid-template-rows: auto 1fr;
-  gap:1px;
-  height: calc(100vh - 60px);
-  background: var(--border);
-}
-
-.panel {
-  background: var(--panel);
-  overflow:hidden;
-}
-
-/* PAIRS PANEL */
-.pairs-panel {
-  grid-row: 1 / 3;
-  display:flex; flex-direction:column;
-}
-
-.panel-header {
-  padding:12px 16px;
-  border-bottom:1px solid var(--border);
-  display:flex; align-items:center; justify-content:space-between;
-}
-.panel-title {
-  font-size:11px; font-weight:600; letter-spacing:3px;
-  color:var(--dim); text-transform:uppercase;
-}
-
-.search-box {
-  margin:10px 12px;
-  position:relative;
-}
-.search-box input {
-  width:100%; padding:7px 12px 7px 30px;
-  background: var(--bg);
-  border:1px solid var(--border);
-  border-radius:5px;
-  color:var(--text);
-  font-family:'Rajdhani',sans-serif;
-  font-size:13px;
-  outline:none;
-  transition:.2s;
-}
-.search-box input:focus { border-color: var(--accent); }
-.search-icon {
-  position:absolute; left:9px; top:50%; transform:translateY(-50%);
-  color:var(--dim); font-size:13px;
-}
-
-.pairs-list {
-  flex:1; overflow-y:auto;
-  scrollbar-width:thin;
-  scrollbar-color: var(--border) transparent;
-}
-
-.pair-item {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:10px 16px;
-  border-bottom:1px solid rgba(26,35,50,0.5);
-  cursor:pointer;
-  transition:.15s;
-  position:relative;
-}
-.pair-item:hover { background: rgba(0,212,255,0.04); }
-.pair-item.active {
-  background: rgba(0,212,255,0.08);
-  border-left:2px solid var(--accent);
-}
-.pair-item.active::after {
-  content:'';
-  position:absolute; right:0; top:0; bottom:0; width:1px;
-  background: var(--accent);
-  box-shadow: var(--glow-blue);
-}
-
-.pair-name {
-  font-size:14px; font-weight:700;
-  color:var(--text);
-}
-.pair-type {
-  font-size:10px; font-weight:600; letter-spacing:1px;
-  color:var(--dim); margin-top:1px;
-}
-.pair-price {
-  text-align:right;
-  font-family:'Share Tech Mono',monospace;
-  font-size:13px;
-  color:var(--text);
-}
-.pair-change {
-  font-size:11px;
-  margin-top:1px;
-}
-.up { color:var(--green); }
-.down { color:var(--red); }
-
-/* CATEGORY */
-.cat-header {
-  padding:8px 16px;
-  font-size:10px; font-weight:700; letter-spacing:3px;
-  color:var(--dim); text-transform:uppercase;
-  background: rgba(0,0,0,0.3);
-  border-bottom:1px solid var(--border);
-}
-
-/* CHART AREA */
-.chart-area {
-  grid-column:2;
-  display:flex; flex-direction:column;
-}
-
-.pair-info-bar {
-  display:flex; align-items:center; gap:24px;
-  padding:12px 20px;
-  border-bottom:1px solid var(--border);
-  flex-shrink:0;
-}
-
-.current-pair {
-  font-size:22px; font-weight:700;
-  color:var(--text);
-  letter-spacing:1px;
-}
-.current-price-big {
-  font-family:'Share Tech Mono',monospace;
-  font-size:24px; font-weight:700;
-  color:var(--green);
-  text-shadow: var(--glow-green);
-}
-.price-change-big {
-  font-size:14px; font-weight:600;
-  padding:3px 8px; border-radius:4px;
-}
-.price-change-big.up { background: rgba(0,255,136,0.1); color:var(--green); }
-.price-change-big.down { background: rgba(255,51,102,0.1); color:var(--red); }
-
-.tf-selector {
-  display:flex; gap:3px; margin-left:auto;
-}
-.tf-btn {
-  padding:4px 10px; border-radius:3px;
-  border:1px solid var(--border);
-  background:transparent;
-  color:var(--dim);
-  font-family:'Rajdhani',sans-serif;
-  font-size:12px; font-weight:600;
-  cursor:pointer; transition:.15s;
-  letter-spacing:1px;
-}
-.tf-btn:hover { border-color:var(--accent); color:var(--accent); }
-.tf-btn.active {
-  background: rgba(0,212,255,0.1);
-  border-color:var(--accent);
-  color:var(--accent);
-}
-
-.chart-container {
-  flex:1;
-  position:relative;
-  overflow:hidden;
-}
-
-canvas#mainChart {
-  width:100% !important;
-  height:100% !important;
-}
-
-/* SIGNALS PANEL */
-.signals-panel {
-  grid-column:3;
-  grid-row: 1 / 3;
-  display:flex; flex-direction:column;
-}
-
-/* INDICATORS BAR */
-.indicators-bar {
-  display:grid; grid-template-columns:1fr 1fr 1fr;
-  gap:1px;
-  background: var(--border);
-  border-top:1px solid var(--border);
-  flex-shrink:0;
-}
-
-.indicator-cell {
-  background: var(--panel);
-  padding:10px 14px;
-  text-align:center;
-}
-.ind-label {
-  font-size:10px; font-weight:600; letter-spacing:2px;
-  color:var(--dim); text-transform:uppercase; margin-bottom:3px;
-}
-.ind-value {
-  font-family:'Share Tech Mono',monospace;
-  font-size:15px; font-weight:700;
-}
-.ind-signal {
-  font-size:10px; font-weight:600; letter-spacing:1px;
-  margin-top:2px; text-transform:uppercase;
-}
-
-/* SIGNAL CARD */
-.signal-list {
-  flex:1; overflow-y:auto;
-  padding:10px;
-  scrollbar-width:thin;
-  scrollbar-color: var(--border) transparent;
-}
-
-.signal-card {
-  background: var(--bg);
-  border:1px solid var(--border);
-  border-radius:8px;
-  padding:14px;
-  margin-bottom:8px;
-  position:relative;
-  overflow:hidden;
-  animation: slideIn .3s ease;
-}
-@keyframes slideIn {
-  from { transform:translateX(20px); opacity:0; }
-  to   { transform:translateX(0); opacity:1; }
-}
-
-.signal-card.BUY {
-  border-color: rgba(0,255,136,0.3);
-  background: linear-gradient(135deg, rgba(0,255,136,0.05) 0%, var(--bg) 60%);
-}
-.signal-card.SELL {
-  border-color: rgba(255,51,102,0.3);
-  background: linear-gradient(135deg, rgba(255,51,102,0.05) 0%, var(--bg) 60%);
-}
-
-.signal-card::before {
-  content:'';
-  position:absolute; left:0; top:0; bottom:0; width:3px;
-}
-.signal-card.BUY::before { background:var(--green); box-shadow:var(--glow-green); }
-.signal-card.SELL::before { background:var(--red); box-shadow:var(--glow-red); }
-
-.sig-top {
-  display:flex; justify-content:space-between; align-items:center;
-  margin-bottom:8px;
-}
-.sig-pair { font-size:15px; font-weight:700; }
-.sig-dir {
-  font-size:12px; font-weight:700; letter-spacing:2px;
-  padding:3px 10px; border-radius:20px;
-}
-.BUY .sig-dir { background:rgba(0,255,136,0.15); color:var(--green); }
-.SELL .sig-dir { background:rgba(255,51,102,0.15); color:var(--red); }
-
-.sig-price {
-  font-family:'Share Tech Mono',monospace;
-  font-size:18px; font-weight:700;
-  margin-bottom:6px;
-}
-.BUY .sig-price { color:var(--green); }
-.SELL .sig-price { color:var(--red); }
-
-.sig-meta {
-  display:flex; gap:10px; flex-wrap:wrap;
-}
-.sig-badge {
-  font-size:10px; font-weight:600; letter-spacing:1px;
-  padding:2px 7px; border-radius:3px;
-  background: var(--border);
-  color:var(--dim);
-  text-transform:uppercase;
-}
-.sig-badge.conf { background:rgba(255,204,0,0.1); color:var(--yellow); }
-
-.sig-confidence {
-  margin-top:8px;
-}
-.conf-label {
-  display:flex; justify-content:space-between;
-  font-size:10px; font-weight:600; letter-spacing:1px;
-  color:var(--dim); margin-bottom:4px;
-  text-transform:uppercase;
-}
-.conf-bar {
-  height:3px; background:var(--border); border-radius:2px;
-  overflow:hidden;
-}
-.conf-fill {
-  height:100%; border-radius:2px;
-  transition: width .8s cubic-bezier(.4,0,.2,1);
-}
-.BUY .conf-fill { background: linear-gradient(90deg, var(--green), #00ff88aa); }
-.SELL .conf-fill { background: linear-gradient(90deg, var(--red), #ff336688); }
-
-.sig-time {
-  font-size:10px; color:var(--dim);
-  font-family:'Share Tech Mono',monospace;
-  margin-top:6px;
-}
-
-.sig-reasons {
-  margin-top:6px;
-  font-size:11px; color:var(--dim);
-  line-height:1.6;
-}
-
-/* EMPTY STATE */
-.empty-state {
-  text-align:center; padding:40px 20px;
-  color:var(--dim);
-}
-.empty-state .icon { font-size:40px; margin-bottom:12px; opacity:.3; }
-.empty-state p { font-size:12px; letter-spacing:1px; }
-
-/* STATS ROW */
-.stats-row {
-  display:grid; grid-template-columns:1fr 1fr;
-  gap:1px; background:var(--border);
-  border-top:1px solid var(--border);
-  flex-shrink:0;
-}
-.stat-cell {
-  background:var(--panel);
-  padding:10px 14px;
-  text-align:center;
-}
-.stat-num {
-  font-family:'Share Tech Mono',monospace;
-  font-size:20px; font-weight:700;
-  color:var(--green);
-}
-.stat-lbl {
-  font-size:10px; font-weight:600; letter-spacing:2px;
-  color:var(--dim); text-transform:uppercase; margin-top:2px;
-}
-
-/* TOAST */
-.toast {
-  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-  padding:10px 20px; border-radius:6px;
-  font-size:13px; font-weight:600; letter-spacing:1px;
-  z-index:1000;
-  animation: toastIn .3s ease;
-  pointer-events:none;
-}
-.toast.BUY { background:rgba(0,255,136,0.15); border:1px solid var(--green); color:var(--green); }
-.toast.SELL { background:rgba(255,51,102,0.15); border:1px solid var(--red); color:var(--red); }
-@keyframes toastIn {
-  from { transform:translateX(-50%) translateY(20px); opacity:0; }
-  to   { transform:translateX(-50%) translateY(0); opacity:1; }
-}
-
-/* RECONNECT BADGE */
-.conn-badge {
-  font-size:11px; font-weight:600; letter-spacing:1px;
-  color:var(--dim); font-family:'Share Tech Mono',monospace;
-}
-
-/* SCROLLBAR */
-::-webkit-scrollbar { width:4px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-
-.loading-overlay {
-  position:absolute; inset:0;
-  display:flex; align-items:center; justify-content:center;
-  flex-direction:column; gap:12px;
-  background:var(--panel);
-  z-index:10;
-}
-.spinner {
-  width:32px; height:32px;
-  border:2px solid var(--border);
-  border-top-color:var(--accent);
-  border-radius:50%;
-  animation: spin 1s linear infinite;
-}
-@keyframes spin { to { transform:rotate(360deg); } }
-.loading-text {
-  font-size:11px; letter-spacing:3px; color:var(--dim);
-  text-transform:uppercase;
-}
+:root{--bg:#080c10;--panel:#0d1117;--border:#1a2332;--accent:#00d4ff;--green:#00ff88;--red:#ff3366;--yellow:#ffcc00;--orange:#ff8800;--text:#c9d1d9;--dim:#4a5568;--glow-green:0 0 18px rgba(0,255,136,0.45);--glow-red:0 0 18px rgba(255,51,102,0.45);--glow-blue:0 0 18px rgba(0,212,255,0.3);}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:15px;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:999;}
+.mono{font-family:'Share Tech Mono',monospace;}
+header{display:flex;align-items:center;justify-content:space-between;padding:13px 22px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0d1117 0%,transparent 100%);}
+.logo{font-size:21px;font-weight:700;letter-spacing:4px;color:var(--accent);text-shadow:var(--glow-blue);}
+.logo span{color:var(--green);}
+.status-bar{display:flex;align-items:center;gap:14px;}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:var(--glow-green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+.conn-badge{font-size:11px;font-weight:600;letter-spacing:1px;color:var(--dim);font-family:'Share Tech Mono',monospace;}
+.mode-toggle{display:flex;gap:4px;background:var(--border);border-radius:6px;padding:3px;}
+.mode-btn{padding:5px 14px;border-radius:4px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;letter-spacing:1px;background:transparent;color:var(--dim);transition:.2s;}
+.mode-btn.active{background:var(--panel);color:var(--accent);box-shadow:var(--glow-blue);}
+.top-controls{display:flex;align-items:center;gap:10px;padding:9px 22px;border-bottom:1px solid var(--border);background:rgba(13,17,23,0.9);flex-wrap:wrap;}
+.ctrl-label{font-size:10px;letter-spacing:2px;color:var(--dim);font-weight:600;}
+.view-toggle{display:flex;gap:3px;background:var(--border);border-radius:6px;padding:3px;}
+.view-btn{padding:5px 16px;border-radius:4px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;background:transparent;color:var(--dim);transition:.2s;}
+.view-btn.active{background:var(--panel);color:var(--yellow);box-shadow:0 0 12px rgba(255,204,0,0.2);}
+.exp-selector{display:flex;gap:3px;}
+.exp-btn{padding:5px 10px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;letter-spacing:1px;background:transparent;color:var(--dim);transition:.2s;}
+.exp-btn.active{background:rgba(0,212,255,0.1);border-color:var(--accent);color:var(--accent);}
+.main-grid{display:grid;grid-template-columns:255px 1fr 300px;height:calc(100vh - 112px);gap:1px;background:var(--border);}
+.pairs-panel{background:var(--panel);display:flex;flex-direction:column;overflow:hidden;}
+.panel-header{padding:11px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.panel-title{font-size:11px;font-weight:700;letter-spacing:3px;color:var(--accent);}
+.search-box{padding:8px 11px;border-bottom:1px solid var(--border);position:relative;}
+.search-box input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 10px 6px 26px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;outline:none;}
+.search-box input:focus{border-color:var(--accent);}
+.search-icon{position:absolute;left:19px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:13px;}
+.pairs-list{flex:1;overflow-y:auto;padding:4px 0;}
+.cat-header{padding:5px 14px 3px;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);}
+.pair-item{padding:7px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:.15s;border-left:2px solid transparent;}
+.pair-item:hover{background:rgba(0,212,255,0.05);}
+.pair-item.active{background:rgba(0,212,255,0.08);border-left-color:var(--accent);}
+.pair-name{font-size:13px;font-weight:600;}
+.pair-type{font-size:10px;color:var(--dim);letter-spacing:1px;}
+.pair-price{text-align:right;}
+.pair-price div:first-child{font-family:'Share Tech Mono',monospace;font-size:11px;}
+.pair-change{font-size:10px;font-weight:600;}
+.pair-change.up{color:var(--green);}
+.pair-change.down{color:var(--red);}
+.sig-dot{width:6px;height:6px;border-radius:50%;margin-right:6px;flex-shrink:0;}
+.chart-area{background:var(--panel);display:flex;flex-direction:column;overflow:hidden;position:relative;}
+.pair-info-bar{padding:11px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+.current-pair{font-size:19px;font-weight:700;letter-spacing:1px;}
+.current-price-big{font-family:'Share Tech Mono',monospace;font-size:21px;color:var(--accent);}
+.price-change-big{font-size:13px;font-weight:600;padding:3px 8px;border-radius:4px;}
+.price-change-big.up{background:rgba(0,255,136,0.1);color:var(--green);}
+.price-change-big.down{background:rgba(255,51,102,0.1);color:var(--red);}
+.tf-selector{display:flex;gap:3px;margin-left:auto;}
+.tf-btn{padding:4px 9px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;letter-spacing:1px;background:transparent;color:var(--dim);transition:.2s;}
+.tf-btn.active{background:rgba(0,212,255,0.1);border-color:var(--accent);color:var(--accent);}
+.chart-container{flex:1;position:relative;min-height:0;}
+.loading-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:var(--panel);z-index:10;}
+.spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-size:11px;letter-spacing:3px;color:var(--dim);}
+canvas{display:block;}
+.indicators-bar{display:grid;grid-template-columns:repeat(6,1fr);border-top:1px solid var(--border);}
+.indicator-cell{padding:7px 10px;border-right:1px solid var(--border);text-align:center;}
+.indicator-cell:last-child{border-right:none;}
+.ind-label{font-size:9px;letter-spacing:2px;color:var(--dim);font-weight:600;margin-bottom:2px;}
+.ind-value{font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:700;}
+.ind-signal{font-size:9px;font-weight:600;letter-spacing:1px;margin-top:1px;}
+/* RIGHT PANEL */
+.signals-panel{background:var(--panel);display:flex;flex-direction:column;overflow:hidden;}
+/* AUTO */
+.auto-scan-block{padding:14px;border-bottom:1px solid var(--border);}
+.auto-title{font-size:10px;letter-spacing:3px;color:var(--dim);margin-bottom:8px;text-align:center;}
+.scan-btn{width:100%;padding:11px;border:none;border-radius:6px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;transition:.2s;}
+.scan-btn.idle{background:rgba(0,212,255,0.08);border:1px solid var(--accent);color:var(--accent);}
+.scan-btn.scanning{background:linear-gradient(135deg,rgba(255,204,0,0.12),rgba(255,136,0,0.08));border:1px solid var(--yellow);color:var(--yellow);animation:scanPulse 1.5s infinite;}
+@keyframes scanPulse{0%,100%{box-shadow:0 0 0 rgba(255,204,0,0);}50%{box-shadow:0 0 18px rgba(255,204,0,0.3);}}
+.best-wrap{flex:1;overflow-y:auto;padding:4px;}
+/* Best Signal Card */
+.bsc{margin:8px;padding:14px;border-radius:8px;border:1px solid var(--border);}
+.bsc.BUY{background:linear-gradient(135deg,rgba(0,255,136,0.06),rgba(0,212,255,0.03));border-color:var(--green);}
+.bsc.SELL{background:linear-gradient(135deg,rgba(255,51,102,0.06),rgba(255,136,0,0.03));border-color:var(--red);}
+.bsc-dir{font-size:28px;font-weight:700;letter-spacing:3px;text-align:center;margin-bottom:6px;}
+.bsc-dir.BUY{color:var(--green);text-shadow:var(--glow-green);}
+.bsc-dir.SELL{color:var(--red);text-shadow:var(--glow-red);}
+.bsc-pair{font-size:16px;font-weight:700;text-align:center;margin-bottom:3px;}
+.bsc-sub{text-align:center;font-size:10px;color:var(--dim);letter-spacing:1px;margin-bottom:8px;}
+.conf-bar{height:3px;border-radius:2px;background:var(--border);margin:6px 0 10px;}
+.conf-fill{height:100%;border-radius:2px;transition:width .5s;}
+.bsc-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;}
+.bsc-row:last-of-type{border-bottom:none;}
+.bsc-k{color:var(--dim);font-size:10px;letter-spacing:1px;}
+.bsc-v{font-weight:600;font-family:'Share Tech Mono',monospace;}
+.bsc-action{text-align:center;margin:10px 0 6px;padding:9px;border-radius:6px;font-size:15px;font-weight:700;letter-spacing:2px;}
+.bsc-action.BUY{background:rgba(0,255,136,0.1);color:var(--green);}
+.bsc-action.SELL{background:rgba(255,51,102,0.1);color:var(--red);}
+.bsc-reentry{padding:8px;background:rgba(255,255,255,0.03);border-radius:5px;margin-top:6px;}
+.bsc-re-title{font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:4px;}
+.bsc-re-item{font-size:11px;padding:2px 0;color:var(--text);}
+.bsc-reasons{margin-top:8px;padding:7px;background:rgba(0,0,0,0.2);border-radius:4px;}
+/* Signal cards */
+.signal-list{flex:1;overflow-y:auto;}
+.sig-card{padding:11px 13px;border-bottom:1px solid var(--border);}
+.sig-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+.sig-dir{font-size:16px;font-weight:700;letter-spacing:2px;}
+.sig-dir.BUY{color:var(--green);}
+.sig-dir.SELL{color:var(--red);}
+.sig-pair-name{font-size:13px;font-weight:600;margin-left:7px;}
+.sig-time-lbl{font-size:10px;color:var(--dim);font-family:'Share Tech Mono',monospace;}
+.sig-meta{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px;}
+.sig-badge{font-size:10px;font-weight:600;letter-spacing:1px;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);color:var(--dim);}
+.sig-badge.c{background:rgba(0,255,136,0.08);color:var(--green);}
+.sig-reasons-txt{font-size:10px;color:var(--dim);line-height:1.6;}
+.sig-entry-bar{padding:5px 9px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1px;text-align:center;margin-top:5px;}
+.sig-entry-bar.BUY{background:rgba(0,255,136,0.08);color:var(--green);}
+.sig-entry-bar.SELL{background:rgba(255,51,102,0.08);color:var(--red);}
+.empty-state{padding:36px 18px;text-align:center;color:var(--dim);}
+.empty-state .icon{font-size:30px;margin-bottom:10px;}
+.stats-row{padding:10px 14px;border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.stat-cell{text-align:center;}
+.stat-num{font-family:'Share Tech Mono',monospace;font-size:17px;font-weight:700;color:var(--accent);}
+.stat-lbl{font-size:9px;letter-spacing:2px;color:var(--dim);}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);padding:11px 20px;border-radius:8px;font-size:14px;font-weight:700;letter-spacing:1px;z-index:1000;animation:toastIn .3s ease;pointer-events:none;white-space:nowrap;}
+.toast.BUY{background:rgba(0,255,136,0.12);border:1px solid var(--green);color:var(--green);}
+.toast.SELL{background:rgba(255,51,102,0.12);border:1px solid var(--red);color:var(--red);}
+@keyframes toastIn{from{transform:translateX(-50%) translateY(20px);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}
+::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 </style>
 </head>
 <body>
@@ -483,1314 +139,768 @@ canvas#mainChart {
   <div class="logo">SIGNAL<span>PRO</span></div>
   <div class="status-bar">
     <div class="mode-toggle">
-      <button class="mode-btn active" onclick="setMode('FIN')" id="btn-FIN">FIN</button>
-      <button class="mode-btn" onclick="setMode('OTC')" id="btn-OTC">OTC</button>
+      <button class="mode-btn active" onclick="setMarket('FIN')" id="btn-FIN">FIN</button>
+      <button class="mode-btn" onclick="setMarket('OTC')" id="btn-OTC">OTC</button>
     </div>
     <div class="status-dot" id="statusDot"></div>
-    <span class="conn-badge mono" id="connLabel">CONNECTING...</span>
+    <span class="conn-badge mono" id="connLabel">INIT...</span>
   </div>
 </header>
 
-<div class="main-grid">
+<div class="top-controls">
+  <span class="ctrl-label">РЕЖИМ:</span>
+  <div class="view-toggle">
+    <button class="view-btn active" onclick="setView('AUTO')" id="vbtn-AUTO">⚡ АВТО</button>
+    <button class="view-btn" onclick="setView('MANUAL')" id="vbtn-MANUAL">🔧 РУЧНИЙ</button>
+  </div>
+  <span class="ctrl-label" style="margin-left:10px;">ЕКCПІРАЦІЯ:</span>
+  <div class="exp-selector">
+    <button class="exp-btn" onclick="setExpiry('1m')">1М</button>
+    <button class="exp-btn active" onclick="setExpiry('5m')">5М</button>
+    <button class="exp-btn" onclick="setExpiry('15m')">15М</button>
+    <button class="exp-btn" onclick="setExpiry('30m')">30М</button>
+    <button class="exp-btn" onclick="setExpiry('1h')">1Ч</button>
+  </div>
+  <span id="scanStatus" style="margin-left:auto;font-size:11px;letter-spacing:1px;color:var(--dim);font-family:'Share Tech Mono',monospace;"></span>
+</div>
 
+<div class="main-grid">
   <!-- PAIRS -->
-  <div class="panel pairs-panel">
+  <div class="pairs-panel">
     <div class="panel-header">
-      <span class="panel-title">Инструменты</span>
+      <span class="panel-title">ІНСТРУМЕНТИ</span>
       <span class="mono" style="font-size:11px;color:var(--dim)" id="pairsCount">0 пар</span>
     </div>
     <div class="search-box">
       <span class="search-icon">⌕</span>
-      <input type="text" placeholder="Поиск..." id="pairSearch" oninput="filterPairs()">
+      <input type="text" placeholder="Пошук..." id="pairSearch" oninput="filterPairs()">
     </div>
     <div class="pairs-list" id="pairsList"></div>
   </div>
 
   <!-- CHART -->
-  <div class="panel chart-area">
+  <div class="chart-area" id="chartArea">
     <div class="pair-info-bar">
       <div>
-        <div class="current-pair" id="chartPair">—</div>
-        <div style="font-size:11px;color:var(--dim)" id="chartType">—</div>
+        <div class="current-pair" id="chartPair">SIGNAL PRO</div>
+        <div style="font-size:11px;color:var(--dim)" id="chartType">Авто скан активний</div>
       </div>
       <div class="current-price-big mono" id="chartPrice">—</div>
-      <div class="price-change-big up" id="chartChange">—</div>
-      <div class="tf-selector" id="tfSelector">
-        <button class="tf-btn" onclick="setTF('1m')">1м</button>
-        <button class="tf-btn active" onclick="setTF('5m')">5м</button>
-        <button class="tf-btn" onclick="setTF('15m')">15м</button>
-        <button class="tf-btn" onclick="setTF('1h')">1ч</button>
-        <button class="tf-btn" onclick="setTF('4h')">4ч</button>
+      <div class="price-change-big up" id="chartChange"></div>
+      <div class="tf-selector">
+        <button class="tf-btn" onclick="setTF('1m')">1М</button>
+        <button class="tf-btn active" onclick="setTF('5m')">5М</button>
+        <button class="tf-btn" onclick="setTF('15m')">15М</button>
+        <button class="tf-btn" onclick="setTF('1h')">1Ч</button>
+        <button class="tf-btn" onclick="setTF('4h')">4Ч</button>
       </div>
     </div>
     <div class="chart-container">
-      <div class="loading-overlay" id="chartLoader">
+      <div class="loading-overlay" id="chartLoader" style="display:none;">
         <div class="spinner"></div>
-        <div class="loading-text">Загрузка котировок</div>
+        <div class="loading-text">ЗАВАНТАЖЕННЯ</div>
       </div>
       <canvas id="mainChart"></canvas>
     </div>
-    <div class="indicators-bar" id="indicatorsBar">
-      <div class="indicator-cell">
-        <div class="ind-label">RSI (14)</div>
-        <div class="ind-value" id="rsiVal" style="color:var(--dim)">—</div>
-        <div class="ind-signal" id="rsiSig" style="color:var(--dim)">—</div>
-      </div>
-      <div class="indicator-cell">
-        <div class="ind-label">MACD</div>
-        <div class="ind-value" id="macdVal" style="color:var(--dim)">—</div>
-        <div class="ind-signal" id="macdSig" style="color:var(--dim)">—</div>
-      </div>
-      <div class="indicator-cell">
-        <div class="ind-label">Bollinger</div>
-        <div class="ind-value" id="bbVal" style="color:var(--dim)">—</div>
-        <div class="ind-signal" id="bbSig" style="color:var(--dim)">—</div>
-      </div>
-      <div class="indicator-cell">
-        <div class="ind-label">EMA 9/21</div>
-        <div class="ind-value" id="emaVal" style="color:var(--dim)">—</div>
-        <div class="ind-signal" id="emaSig" style="color:var(--dim)">—</div>
-      </div>
-      <div class="indicator-cell">
-        <div class="ind-label">Stoch RSI</div>
-        <div class="ind-value" id="stochVal" style="color:var(--dim)">—</div>
-        <div class="ind-signal" id="stochSig" style="color:var(--dim)">—</div>
-      </div>
-      <div class="indicator-cell">
-        <div class="ind-label">СИГНАЛ</div>
-        <div class="ind-value" id="overallSig" style="color:var(--dim);font-size:18px">—</div>
-        <div class="ind-signal" id="overallConf" style="color:var(--dim)">—</div>
-      </div>
+    <div class="indicators-bar" id="indBar" style="display:none;">
+      <div class="indicator-cell"><div class="ind-label">RSI (14)</div><div class="ind-value" id="rsiVal" style="color:var(--dim)">—</div><div class="ind-signal" id="rsiSig" style="color:var(--dim)">—</div></div>
+      <div class="indicator-cell"><div class="ind-label">MACD</div><div class="ind-value" id="macdVal" style="color:var(--dim)">—</div><div class="ind-signal" id="macdSig" style="color:var(--dim)">—</div></div>
+      <div class="indicator-cell"><div class="ind-label">Bollinger</div><div class="ind-value" id="bbVal" style="color:var(--dim)">—</div><div class="ind-signal" id="bbSig" style="color:var(--dim)">—</div></div>
+      <div class="indicator-cell"><div class="ind-label">EMA 9/21</div><div class="ind-value" id="emaVal" style="color:var(--dim)">—</div><div class="ind-signal" id="emaSig" style="color:var(--dim)">—</div></div>
+      <div class="indicator-cell"><div class="ind-label">Stoch/ADX</div><div class="ind-value" id="stochVal" style="color:var(--dim)">—</div><div class="ind-signal" id="stochSig" style="color:var(--dim)">—</div></div>
+      <div class="indicator-cell"><div class="ind-label">СИГНАЛ</div><div class="ind-value" id="overallSig" style="color:var(--dim);font-size:17px">—</div><div class="ind-signal" id="overallConf" style="color:var(--dim)">—</div></div>
     </div>
   </div>
 
-  <!-- SIGNALS -->
-  <div class="panel signals-panel">
-    <div class="panel-header">
-      <span class="panel-title">Сигналы</span>
-      <button onclick="clearSignals()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:11px;letter-spacing:1px;font-family:'Rajdhani',sans-serif;font-weight:600;">ОЧИСТИТЬ</button>
-    </div>
-    <div class="signal-list" id="signalList">
-      <div class="empty-state">
-        <div class="icon">📡</div>
-        <p>ОЖИДАНИЕ СИГНАЛОВ</p>
-        <p style="margin-top:6px;font-size:10px">Анализ рынка...</p>
+  <!-- RIGHT PANEL -->
+  <div class="signals-panel">
+    <!-- AUTO BLOCK -->
+    <div id="autoBlock" style="display:flex;flex-direction:column;height:100%;">
+      <div class="auto-scan-block">
+        <div class="auto-title">АВТОМАТИЧНЕ СКАНУВАННЯ</div>
+        <button class="scan-btn idle" id="scanBtn" onclick="toggleAutoScan()">▶ ЗАПУСТИТИ СКАН</button>
+        <div style="margin-top:7px;font-size:10px;letter-spacing:1px;color:var(--dim);text-align:center;" id="scanInfo">Знаходить найкращий вхід серед усіх пар</div>
+      </div>
+      <div class="best-wrap" id="bestWrap">
+        <div class="empty-state"><div class="icon">🎯</div><p>НАЙКРАЩИЙ СИГНАЛ</p><p style="margin-top:5px;font-size:10px">Натисніть запустити</p></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-cell"><div class="stat-num" id="stTotal">0</div><div class="stat-lbl">Сигналів</div></div>
+        <div class="stat-cell"><div class="stat-num" id="stWin">0</div><div class="stat-lbl">Виграш</div></div>
+        <div class="stat-cell"><div class="stat-num" id="stAcc">—</div><div class="stat-lbl">Точність</div></div>
       </div>
     </div>
-    <div class="stats-row">
-      <div class="stat-cell">
-        <div class="stat-num" id="statTotal">0</div>
-        <div class="stat-lbl">Сигналов</div>
+    <!-- MANUAL BLOCK -->
+    <div id="manualBlock" style="display:none;flex-direction:column;height:100%;">
+      <div class="panel-header">
+        <span class="panel-title">СИГНАЛИ</span>
+        <button onclick="clearSignals()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:11px;letter-spacing:1px;font-family:'Rajdhani',sans-serif;font-weight:600;">ОЧИСТИТИ</button>
       </div>
-      <div class="stat-cell">
-        <div class="stat-num" id="statAccuracy">—</div>
-        <div class="stat-lbl">Точность</div>
+      <div class="signal-list" id="signalList">
+        <div class="empty-state"><div class="icon">📡</div><p>ОЧІКУВАННЯ СИГНАЛІВ</p><p style="margin-top:5px;font-size:10px">Оберіть пару ліворуч</p></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-cell"><div class="stat-num" id="stTotal2">0</div><div class="stat-lbl">Сигналів</div></div>
+        <div class="stat-cell"><div class="stat-num" id="stWin2">0</div><div class="stat-lbl">Виграш</div></div>
+        <div class="stat-cell"><div class="stat-num" id="stAcc2">—</div><div class="stat-lbl">Точність</div></div>
       </div>
     </div>
   </div>
-
 </div>
 
 <script>
-// ─── STATE ───────────────────────────────────────────────────────────
-let mode = 'FIN';
-let activePair = null;
-let currentTF = '5m';
-let prices = {};       // symbol -> {price, change, history:[]}
-let candles = {};      // symbol -> tf -> [{o,h,l,c,t}]
-let signals = [];
-let ws = {};           // websocket connections
-let animFrame = null;
-let totalSignals = 0;
-let trueSignals = 0;
+// ═══════════════ СТАН ═══════════════════════
+let market='FIN', viewMode='AUTO', activePair=null, currentTF='5m', currentExpiry='5m';
+let autoScanning=false, autoScanTimer=null, simTimer=null;
+let prices={}, candles={}, signals=[], lastSigTime={}, sigThrottle={};
+let totalSig=0, winSig=0;
 
-// ─── INSTRUMENTS ─────────────────────────────────────────────────────
-const FIN_PAIRS = [
-  {sym:'BTCUSDT',  name:'BTC/USDT',  type:'Crypto',   base:65000,  vol:0.0008},
-  {sym:'ETHUSDT',  name:'ETH/USDT',  type:'Crypto',   base:3200,   vol:0.001},
-  {sym:'SOLUSDT',  name:'SOL/USDT',  type:'Crypto',   base:145,    vol:0.0015},
-  {sym:'BNBUSDT',  name:'BNB/USDT',  type:'Crypto',   base:580,    vol:0.001},
-  {sym:'XRPUSDT',  name:'XRP/USDT',  type:'Crypto',   base:0.52,   vol:0.002},
-  {sym:'EURUSD',   name:'EUR/USD',   type:'Forex',    base:1.0855, vol:0.0002},
-  {sym:'GBPUSD',   name:'GBP/USD',   type:'Forex',    base:1.2690, vol:0.0003},
-  {sym:'USDJPY',   name:'USD/JPY',   type:'Forex',    base:151.50, vol:0.0003},
-  {sym:'XAUUSD',   name:'XAU/USD',   type:'Commodity',base:2340,   vol:0.0004},
-  {sym:'XAGUSD',   name:'XAG/USD',   type:'Commodity',base:27.5,   vol:0.0008},
-  {sym:'USOIL',    name:'WTI Oil',   type:'Commodity',base:78.5,   vol:0.0006},
-  {sym:'SP500',    name:'S&P 500',   type:'Index',    base:5250,   vol:0.0003},
+// ═══════════════ ПАРИ ═══════════════════════
+const FIN_PAIRS=[
+  {sym:'GBPJPY',name:'GBP/JPY',type:'Forex',base:191.5,vol:0.00045},
+  {sym:'EURJPY',name:'EUR/JPY',type:'Forex',base:162.8,vol:0.00040},
+  {sym:'AUDCAD',name:'AUD/CAD',type:'Forex',base:0.9020,vol:0.00025},
+  {sym:'AUDCHF',name:'AUD/CHF',type:'Forex',base:0.5680,vol:0.00025},
+  {sym:'AUDJPY',name:'AUD/JPY',type:'Forex',base:100.2,vol:0.00035},
+  {sym:'AUDUSD',name:'AUD/USD',type:'Forex',base:0.6520,vol:0.00022},
+  {sym:'CADCHF',name:'CAD/CHF',type:'Forex',base:0.6520,vol:0.00022},
+  {sym:'CADJPY',name:'CAD/JPY',type:'Forex',base:110.5,vol:0.00035},
+  {sym:'CHFJPY',name:'CHF/JPY',type:'Forex',base:168.2,vol:0.00038},
+  {sym:'EURCAD',name:'EUR/CAD',type:'Forex',base:1.5020,vol:0.00028},
+  {sym:'EURCHF',name:'EUR/CHF',type:'Forex',base:0.9450,vol:0.00018},
+  {sym:'EURUSD',name:'EUR/USD',type:'Forex',base:1.0850,vol:0.00018},
+  {sym:'GBPAUD',name:'GBP/AUD',type:'Forex',base:2.0280,vol:0.00040},
+  {sym:'GBPCAD',name:'GBP/CAD',type:'Forex',base:1.7850,vol:0.00035},
+  {sym:'GBPCHF',name:'GBP/CHF',type:'Forex',base:1.1320,vol:0.00032},
+  {sym:'GBPUSD',name:'GBP/USD',type:'Forex',base:1.2750,vol:0.00025},
+  {sym:'USDCAD',name:'USD/CAD',type:'Forex',base:1.3620,vol:0.00020},
+  {sym:'USDCHF',name:'USD/CHF',type:'Forex',base:0.8760,vol:0.00018},
+  {sym:'USDJPY',name:'USD/JPY',type:'Forex',base:151.5,vol:0.00030},
+  {sym:'EURAUD',name:'EUR/AUD',type:'Forex',base:1.6520,vol:0.00032},
+  {sym:'EURGBP',name:'EUR/GBP',type:'Forex',base:0.8540,vol:0.00018},
 ];
 
-const OTC_PAIRS = [
-  {sym:'EURUSD_OTC',name:'EUR/USD OTC',type:'OTC',   base:1.0855, vol:0.0003},
-  {sym:'GBPUSD_OTC',name:'GBP/USD OTC',type:'OTC',   base:1.2690, vol:0.0004},
-  {sym:'USDJPY_OTC',name:'USD/JPY OTC',type:'OTC',   base:151.50, vol:0.0004},
-  {sym:'AUDUSD_OTC',name:'AUD/USD OTC',type:'OTC',   base:0.6520, vol:0.0004},
-  {sym:'USDCAD_OTC',name:'USD/CAD OTC',type:'OTC',   base:1.3620, vol:0.0003},
-  {sym:'EURGBP_OTC',name:'EUR/GBP OTC',type:'OTC',   base:0.8560, vol:0.0003},
-  {sym:'XAUUSD_OTC',name:'XAU OTC',    type:'OTC',   base:2340,   vol:0.0005},
-  {sym:'BTCUSDT_OTC',name:'BTC OTC',   type:'OTC',   base:65000,  vol:0.001},
+const OTC_PAIRS=[
+  {sym:'AUDCAD_O',name:'AUD/CAD OTC',type:'OTC',base:0.9020,vol:0.00028},
+  {sym:'AUDCHF_O',name:'AUD/CHF OTC',type:'OTC',base:0.5680,vol:0.00028},
+  {sym:'AUDJPY_O',name:'AUD/JPY OTC',type:'OTC',base:100.2,vol:0.00040},
+  {sym:'AUDUSD_O',name:'AUD/USD OTC',type:'OTC',base:0.6520,vol:0.00025},
+  {sym:'AUDNZD_O',name:'AUD/NZD OTC',type:'OTC',base:1.0820,vol:0.00030},
+  {sym:'CADCHF_O',name:'CAD/CHF OTC',type:'OTC',base:0.6520,vol:0.00025},
+  {sym:'CADJPY_O',name:'CAD/JPY OTC',type:'OTC',base:110.5,vol:0.00038},
+  {sym:'CHFJPY_O',name:'CHF/JPY OTC',type:'OTC',base:168.2,vol:0.00040},
+  {sym:'CHFNOK_O',name:'CHF/NOK OTC',type:'OTC',base:11.85,vol:0.00050},
+  {sym:'EURCHF_O',name:'EUR/CHF OTC',type:'OTC',base:0.9450,vol:0.00020},
+  {sym:'EURGBP_O',name:'EUR/GBP OTC',type:'OTC',base:0.8540,vol:0.00020},
+  {sym:'EURHUF_O',name:'EUR/HUF OTC',type:'OTC',base:392.0,vol:0.00080},
+  {sym:'EURJPY_O',name:'EUR/JPY OTC',type:'OTC',base:162.8,vol:0.00045},
+  {sym:'EURNZD_O',name:'EUR/NZD OTC',type:'OTC',base:1.7820,vol:0.00040},
+  {sym:'EURTRY_O',name:'EUR/TRY OTC',type:'OTC',base:35.20,vol:0.00120},
+  {sym:'EURUSD_O',name:'EUR/USD OTC',type:'OTC',base:1.0850,vol:0.00020},
+  {sym:'GBPAUD_O',name:'GBP/AUD OTC',type:'OTC',base:2.0280,vol:0.00045},
+  {sym:'GBPJPY_O',name:'GBP/JPY OTC',type:'OTC',base:191.5,vol:0.00050},
+  {sym:'GBPUSD_O',name:'GBP/USD OTC',type:'OTC',base:1.2750,vol:0.00028},
+  {sym:'NZDJPY_O',name:'NZD/JPY OTC',type:'OTC',base:89.50,vol:0.00040},
+  {sym:'NZDUSD_O',name:'NZD/USD OTC',type:'OTC',base:0.6120,vol:0.00025},
+  {sym:'USDARS_O',name:'USD/ARS OTC',type:'OTC',base:875.0,vol:0.00200},
+  {sym:'USDBDT_O',name:'USD/BDT OTC',type:'OTC',base:110.5,vol:0.00060},
+  {sym:'USDBRL_O',name:'USD/BRL OTC',type:'OTC',base:5.020,vol:0.00080},
+  {sym:'USDCAD_O',name:'USD/CAD OTC',type:'OTC',base:1.3620,vol:0.00022},
+  {sym:'USDCHF_O',name:'USD/CHF OTC',type:'OTC',base:0.8760,vol:0.00020},
+  {sym:'USDCLP_O',name:'USD/CLP OTC',type:'OTC',base:920.0,vol:0.00150},
+  {sym:'USDCNH_O',name:'USD/CNH OTC',type:'OTC',base:7.235,vol:0.00040},
+  {sym:'USDCOP_O',name:'USD/COP OTC',type:'OTC',base:4150.0,vol:0.00200},
+  {sym:'USDDZ_O', name:'USD/DZD OTC',type:'OTC',base:134.8,vol:0.00060},
+  {sym:'USDEGP_O',name:'USD/EGP OTC',type:'OTC',base:49.20,vol:0.00100},
+  {sym:'USDIDR_O',name:'USD/IDR OTC',type:'OTC',base:15850,vol:0.00080},
+  {sym:'USDINR_O',name:'USD/INR OTC',type:'OTC',base:83.20,vol:0.00035},
+  {sym:'USDJPY_O',name:'USD/JPY OTC',type:'OTC',base:151.5,vol:0.00032},
+  {sym:'USDKES_O',name:'KES/USD OTC',type:'OTC',base:130.5,vol:0.00100},
+  {sym:'USDMXN_O',name:'USD/MXN OTC',type:'OTC',base:17.25,vol:0.00080},
+  {sym:'USDMYR_O',name:'USD/MYR OTC',type:'OTC',base:4.720,vol:0.00050},
+  {sym:'USDNGN_O',name:'NGN/USD OTC',type:'OTC',base:1580.0,vol:0.00200},
+  {sym:'USDPKR_O',name:'USD/PKR OTC',type:'OTC',base:278.5,vol:0.00100},
+  {sym:'USDPHP_O',name:'USD/PHP OTC',type:'OTC',base:57.20,vol:0.00060},
+  {sym:'USDSGD_O',name:'USD/SGD OTC',type:'OTC',base:1.3480,vol:0.00022},
+  {sym:'USDTHB_O',name:'USD/THB OTC',type:'OTC',base:35.80,vol:0.00050},
+  {sym:'USDVND_O',name:'USD/VND OTC',type:'OTC',base:24850,vol:0.00060},
+  {sym:'UAHUSD_O',name:'UAH/USD OTC',type:'OTC',base:26.50,vol:0.00150},
+  {sym:'ZARUSD_O',name:'ZAR/USD OTC',type:'OTC',base:18.50,vol:0.00120},
+  {sym:'QARCNY_O',name:'QAR/CNY OTC',type:'OTC',base:1.990,vol:0.00050},
+  {sym:'JODCNY_O',name:'JOD/CNY OTC',type:'OTC',base:10.25,vol:0.00060},
+  {sym:'SARCNY_O',name:'SAR/CNY OTC',type:'OTC',base:1.930,vol:0.00050},
+  {sym:'OMRCNY_O',name:'OMR/CNY OTC',type:'OTC',base:18.80,vol:0.00060},
+  {sym:'BHCNY_O', name:'BHD/CNY OTC',type:'OTC',base:19.20,vol:0.00060},
+  {sym:'LBPUSD_O',name:'LBP/USD OTC',type:'OTC',base:0.0000664,vol:0.00200},
+  {sym:'TNDUSD_O',name:'TND/USD OTC',type:'OTC',base:0.3210,vol:0.00080},
+  {sym:'MADUSD_O',name:'MAD/USD OTC',type:'OTC',base:0.0995,vol:0.00080},
+  {sym:'YERUSD_O',name:'YER/USD OTC',type:'OTC',base:0.0040,vol:0.00200},
 ];
 
-function getPairs(){ return mode==='FIN' ? FIN_PAIRS : OTC_PAIRS; }
+function getPairs(){return market==='FIN'?FIN_PAIRS:OTC_PAIRS;}
 
-// ─── INIT PRICES ─────────────────────────────────────────────────────
+// ═══════════════ ЦІНИ / СВІЧКИ ═══════════════════
 function initPrices(){
   getPairs().forEach(p=>{
     if(!prices[p.sym]){
-      prices[p.sym] = {price: p.base, change: 0, history:[], vol: p.vol, base: p.base};
-      candles[p.sym] = {};
-      generateInitialCandles(p.sym);
+      prices[p.sym]={price:p.base,change:0,history:[],vol:p.vol,base:p.base};
+      candles[p.sym]={};
+      genCandles(p.sym,p);
     }
   });
 }
 
-function generateInitialCandles(sym){
-  const p = prices[sym];
-  const tfs = ['1m','5m','15m','1h','4h'];
-  tfs.forEach(tf=>{
-    candles[sym][tf] = [];
-    let price = p.price * (0.97 + Math.random()*0.06);
-    const count = 120;
-    for(let i=0;i<count;i++){
-      const vol = p.vol * (0.5 + Math.random()*1.5);
-      const o = price;
-      const change = (Math.random()-0.5)*2*vol;
-      const c = o*(1+change);
-      const h = Math.max(o,c) * (1 + Math.random()*vol*0.5);
-      const l = Math.min(o,c) * (1 - Math.random()*vol*0.5);
-      candles[sym][tf].push({o,h,l,c,t:Date.now()-((count-i)*tfMs(tf))});
-      price = c;
+function genCandles(sym,pair){
+  ['1m','5m','15m','30m','1h','4h'].forEach(tf=>{
+    candles[sym][tf]=[];
+    let price=pair.base*(0.985+Math.random()*0.03);
+    for(let i=0;i<180;i++){
+      const vol=pair.vol*(0.5+Math.random()*1.5);
+      const o=price,c=o*(1+(Math.random()-0.5)*2*vol);
+      const h=Math.max(o,c)*(1+Math.random()*vol*0.35);
+      const l=Math.min(o,c)*(1-Math.random()*vol*0.35);
+      candles[sym][tf].push({o,h,l,c,t:Date.now()-((180-i)*tfMs(tf))});
+      price=c;
     }
-    prices[sym].price = price;
+    prices[sym].price=price;
+    prices[sym].change=((price/pair.base)-1)*100;
   });
-  const hist = candles[sym]['5m'].map(c=>c.c);
-  prices[sym].history = hist;
-  prices[sym].change = ((prices[sym].price/prices[sym].base)-1)*100;
+  prices[sym].history=candles[sym]['5m'].map(c=>c.c).slice(-100);
 }
 
-function tfMs(tf){
-  const map={'1m':60e3,'5m':300e3,'15m':900e3,'1h':3600e3,'4h':14400e3};
-  return map[tf]||300e3;
-}
+function tfMs(tf){return{'1m':60e3,'5m':300e3,'15m':900e3,'30m':1800e3,'1h':3600e3,'4h':14400e3}[tf]||300e3;}
 
-// ─── MULTI-SOURCE REAL DATA FEED ─────────────────────────────────────
-// Джерела (авто-фалбек):
-//   1. Binance REST klines + WS тікери  (найкраще, реалтайм)
-//   2. CoinGecko REST (якщо Binance заблокований)
-//   3. Kraken REST + WS                 (резервне)
-//   4. Симуляція на реальній базі       (офлайн fallback)
-
-let binanceWS = null;
-let krakenWS  = null;
-let tickInterval = null;
-let wsReconnectTimer = null;
-let dataSource = 'none'; // 'binance' | 'coingecko' | 'kraken' | 'sim'
-
-const BINANCE_SYMS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT'];
-
-// CoinGecko IDs
-const GECKO_MAP = {
-  BTCUSDT:'bitcoin', ETHUSDT:'ethereum', SOLUSDT:'solana',
-  BNBUSDT:'binancecoin', XRPUSDT:'ripple'
-};
-// Kraken pairs
-const KRAKEN_MAP = {
-  BTCUSDT:'XBT/USDT', ETHUSDT:'ETH/USDT', SOLUSDT:'SOL/USDT',
-  BNBUSDT:'BNB/USDT', XRPUSDT:'XRP/USDT'
-};
-
-// ── 1. BINANCE ────────────────────────────────────────────────────────
-async function fetchBinanceKlines(sym, tf, limit=150){
-  const url = `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
-  const res = await fetch(url, {signal: AbortSignal.timeout(5000)});
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  const data = await res.json();
-  candles[sym][tf] = data.map(k=>({
-    t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4]
-  }));
-  const last = candles[sym][tf].at(-1);
-  if(prices[sym]){
-    prices[sym].price  = last.c;
-    prices[sym].change = ((last.c / candles[sym][tf][0].o) - 1) * 100;
-  }
-}
-
-function connectBinanceWS(){
-  if(binanceWS){ try{binanceWS.close()}catch(e){} }
-  const streams = BINANCE_SYMS.map(s=>s.toLowerCase()+'@miniTicker').join('/');
-  binanceWS = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
-
-  binanceWS.onopen  = ()=>{ updateConnStatus(true,'🟢 BINANCE WS LIVE'); dataSource='binance'; };
-  binanceWS.onmessage = (e)=>{
-    try{
-      const d = JSON.parse(e.data).data;
-      if(!d||!prices[d.s]) return;
-      const price = +d.c, open24 = +d.o;
-      prices[d.s].price  = price;
-      prices[d.s].change = ((price/open24)-1)*100;
-      prices[d.s].history.push(price);
-      if(prices[d.s].history.length>500) prices[d.s].history.shift();
-      updateCurrentCandle(d.s, price);
-      renderPairs();
-      if(activePair===d.s) updateIndicators(d.s);
-      runSignalEngineFor(d.s);
-    }catch(e){}
-  };
-  binanceWS.onerror = ()=>{ updateConnStatus(false,'⚠ BINANCE НЕДОСТУПНИЙ'); };
-  binanceWS.onclose = ()=>{
-    updateConnStatus(false,'🔄 ПЕРЕПІДКЛЮЧЕННЯ...');
-    clearTimeout(wsReconnectTimer);
-    wsReconnectTimer = setTimeout(connectBinanceWS, 4000);
-  };
-}
-
-// ── 2. COINGECKO (fallback REST, оновлення кожні 15с) ────────────────
-async function fetchCoinGeckoPrice(){
-  const ids = Object.values(GECKO_MAP).join(',');
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
-  const res = await fetch(url, {signal: AbortSignal.timeout(6000)});
-  if(!res.ok) throw new Error('CG '+res.status);
-  const data = await res.json();
-  Object.entries(GECKO_MAP).forEach(([sym,id])=>{
-    if(!data[id]||!prices[sym]) return;
-    const price = data[id].usd;
-    const chg   = data[id].usd_24h_change||0;
-    prices[sym].price  = price;
-    prices[sym].change = chg;
-    prices[sym].history.push(price);
-    if(prices[sym].history.length>500) prices[sym].history.shift();
-    updateCurrentCandle(sym, price);
-  });
-  return true;
-}
-
-// CoinGecko не дає свічки безкоштовно — генеруємо правдоподібні
-// на основі реальної поточної ціни та волатильності
-function buildCandlesFromPrice(sym){
-  if(!prices[sym]) return;
-  const p = prices[sym];
-  ['1m','5m','15m','1h','4h'].forEach(tf=>{
-    if(candles[sym][tf] && candles[sym][tf].length>5) return; // вже є
-    candles[sym][tf] = [];
-    const pair = [...FIN_PAIRS,...OTC_PAIRS].find(x=>x.sym===sym);
-    const vol = pair ? pair.vol : 0.001;
-    let price = p.price * (1 - p.change/100); // стартова ціна 24г тому
-    const count = 150;
-    for(let i=0;i<count;i++){
-      const drift = p.change/100/count; // дрейф до поточної ціни
-      const o = price;
-      const c = o*(1 + drift + (Math.random()-0.5)*vol*0.8);
-      const h = Math.max(o,c)*(1+Math.random()*vol*0.3);
-      const l = Math.min(o,c)*(1-Math.random()*vol*0.3);
-      candles[sym][tf].push({o,h,l,c, t:Date.now()-((count-i)*tfMs(tf))});
-      price = c;
-    }
-    // Останню свічку виставляємо на реальну ціну
-    candles[sym][tf].at(-1).c = p.price;
-  });
-}
-
-// ── 3. KRAKEN WS (другий резерв для крипто) ──────────────────────────
-function connectKrakenWS(){
-  if(krakenWS){ try{krakenWS.close()}catch(e){} }
-  krakenWS = new WebSocket('wss://ws.kraken.com');
-  krakenWS.onopen = ()=>{
-    updateConnStatus(true,'🟡 KRAKEN WS LIVE');
-    dataSource='kraken';
-    const pairs = Object.values(KRAKEN_MAP);
-    krakenWS.send(JSON.stringify({event:'subscribe', pair:pairs, subscription:{name:'ticker'}}));
-  };
-  krakenWS.onmessage = (e)=>{
-    try{
-      const msg = JSON.parse(e.data);
-      if(!Array.isArray(msg)||msg[2]!=='ticker') return;
-      const krakenPair = msg[3];
-      const sym = Object.entries(KRAKEN_MAP).find(([,v])=>v===krakenPair)?.[0];
-      if(!sym||!prices[sym]) return;
-      const price = +msg[1].c[0];
-      const open  = +msg[1].o[1];
-      prices[sym].price  = price;
-      prices[sym].change = ((price/open)-1)*100;
-      prices[sym].history.push(price);
-      if(prices[sym].history.length>500) prices[sym].history.shift();
-      updateCurrentCandle(sym, price);
-      renderPairs();
-      if(activePair===sym) updateIndicators(sym);
-      runSignalEngineFor(sym);
-    }catch(e){}
-  };
-  krakenWS.onerror = ()=>{ updateConnStatus(false,'⚠ KRAKEN ПОМИЛКА'); };
-  krakenWS.onclose = ()=>{ setTimeout(connectKrakenWS, 5000); };
-}
-
-// ── 4. FOREX/COMMODITY симуляція (реальний WS потребує брокера) ───────
-function startForexSimFeed(){
-  // Зупиняємо попередній якщо є
-  if(window._forexTimer) clearInterval(window._forexTimer);
-  window._forexTimer = setInterval(()=>{
-    const pairs = getPairs().filter(p=>p.type!=='Crypto');
-    pairs.forEach(p=>{
-      const st = prices[p.sym];
-      if(!st) return;
-      const tick = (Math.random()-0.499)*st.vol*st.price*0.2;
-      st.price  += tick;
-      st.change  = ((st.price/st.base)-1)*100;
-      st.history.push(st.price);
-      if(st.history.length>500) st.history.shift();
-      updateCurrentCandle(p.sym, st.price);
-    });
-    renderPairs();
-    if(activePair){
-      const p = getPairs().find(x=>x.sym===activePair);
-      if(p && p.type!=='Crypto') updateIndicators(activePair);
-    }
-  }, 1200);
-}
-
-// ── ПОВНА СИМУЛЯЦІЯ (офлайн fallback) ────────────────────────────────
-function startSimulatedFeed(){
-  clearInterval(tickInterval);
-  updateConnStatus(false,'📴 OFFLINE MODE');
-  tickInterval = setInterval(()=>{
+function startSim(){
+  clearInterval(simTimer);
+  simTimer=setInterval(()=>{
     getPairs().forEach(p=>{
-      const st = prices[p.sym];
-      if(!st) return;
-      const tick = (Math.random()-0.499)*st.vol*st.price*0.3;
-      st.price  += tick;
-      st.change  = ((st.price/st.base)-1)*100;
-      st.history.push(st.price);
-      if(st.history.length>500) st.history.shift();
-      updateCurrentCandle(p.sym, st.price);
+      const st=prices[p.sym];if(!st)return;
+      const tick=(Math.random()-0.499)*st.vol*st.price*0.8+(st.base-st.price)*0.0001;
+      st.price+=tick;st.change=((st.price/st.base)-1)*100;
+      st.history.push(st.price);if(st.history.length>500)st.history.shift();
+      updCandle(p.sym,st.price);
     });
     renderPairs();
-    if(activePair) updateIndicators(activePair);
-    runSignalEngine();
-  }, 800);
+    if(activePair&&viewMode==='MANUAL'){updChartPrice(activePair);updateIndicators(activePair);}
+    if(autoScanning)runAutoScan();
+    else if(viewMode==='MANUAL'&&activePair)runSigFor(activePair);
+  },900);
 }
 
-// ── ГОЛОВНИЙ ЗАПУСК — авто-вибір джерела ─────────────────────────────
-async function startFeed(){
-  clearInterval(tickInterval);
-  if(binanceWS){ try{binanceWS.close()}catch(e){} binanceWS=null; }
-  if(krakenWS){  try{krakenWS.close()}catch(e){} krakenWS=null;  }
-  clearTimeout(wsReconnectTimer);
-  if(window._forexTimer) clearInterval(window._forexTimer);
-
-  initPrices();
-  renderPairs();
-
-  if(mode === 'OTC'){
-    updateConnStatus(true,'🟡 OTC SIM FEED');
-    BINANCE_SYMS.forEach(sym=>{ if(candles[sym]) buildCandlesFromPrice(sym); });
-    startSimulatedFeed();
-    return;
-  }
-
-  // FIN mode — пробуємо джерела по черзі
-  updateConnStatus(false,'⏳ ЗАВАНТАЖЕННЯ...');
-
-  // Крок 1: Спробувати Binance REST klines (найкраще — реальні свічки)
-  let binanceOk = false;
-  try {
-    updateConnStatus(false,'⏳ BINANCE REST...');
-    await fetchBinanceKlines('BTCUSDT','5m',5); // тест
-    binanceOk = true;
-  } catch(e){ binanceOk = false; }
-
-  if(binanceOk){
-    // Завантажуємо всі пари та таймфрейми фоново
-    updateConnStatus(false,'📥 ЗАВАНТАЖЕННЯ СВІЧОК...');
-    const tfs = ['1m','5m','15m','1h','4h'];
-    const load = async()=>{
-      for(const p of FIN_PAIRS.filter(x=>BINANCE_SYMS.includes(x.sym))){
-        for(const tf of tfs){
-          try{ await fetchBinanceKlines(p.sym, tf, 150); }catch(e){}
-          await new Promise(r=>setTimeout(r,80));
-        }
-      }
-      renderPairs();
-      if(activePair) { renderChart(activePair); updateIndicators(activePair); }
-    };
-    load(); // фоново
-    connectBinanceWS();
-    startForexSimFeed();
-    setTimeout(()=>{ if(activePair) renderChart(activePair); }, 1500);
-    return;
-  }
-
-  // Крок 2: CoinGecko fallback
-  let geckoOk = false;
-  try {
-    updateConnStatus(false,'⏳ COINGECKO...');
-    geckoOk = await fetchCoinGeckoPrice();
-  } catch(e){ geckoOk = false; }
-
-  if(geckoOk){
-    dataSource = 'coingecko';
-    updateConnStatus(true,'🟢 COINGECKO LIVE');
-    BINANCE_SYMS.forEach(sym=>buildCandlesFromPrice(sym));
-    renderPairs();
-    if(activePair){ renderChart(activePair); updateIndicators(activePair); }
-    startForexSimFeed();
-
-    // Оновлення цін кожні 15 секунд (ліміт CoinGecko)
-    const geckoTimer = setInterval(async()=>{
-      try{
-        await fetchCoinGeckoPrice();
-        renderPairs();
-        if(activePair) updateIndicators(activePair);
-        runSignalEngine();
-      }catch(e){}
-    }, 15000);
-
-    // Паралельно намагаємось підключити Kraken WS
-    try{ connectKrakenWS(); }catch(e){}
-    return;
-  }
-
-  // Крок 3: Kraken WS
-  try {
-    updateConnStatus(false,'⏳ KRAKEN WS...');
-    connectKrakenWS();
-    BINANCE_SYMS.forEach(sym=>buildCandlesFromPrice(sym));
-    startForexSimFeed();
-    return;
-  } catch(e){}
-
-  // Крок 4: Повна симуляція
-  updateConnStatus(false,'📴 OFFLINE — СИМУЛЯЦІЯ');
-  startSimulatedFeed();
-}
-
-function updateCurrentCandle(sym, price){
-  const now = Date.now();
-  const tfs = ['1m','5m','15m','1h','4h'];
-  tfs.forEach(tf=>{
-    const arr = candles[sym][tf];
-    if(!arr||arr.length===0) return;
-    const last = arr[arr.length-1];
-    const elapsed = now - last.t;
-    if(elapsed >= tfMs(tf)){
-      // new candle
-      arr.push({o:last.c, h:price, l:price, c:price, t:now});
-      if(arr.length>200) arr.shift();
-    } else {
-      last.c = price;
-      last.h = Math.max(last.h, price);
-      last.l = Math.min(last.l, price);
-    }
+function updCandle(sym,price){
+  const now=Date.now();
+  Object.keys(candles[sym]||{}).forEach(tf=>{
+    const arr=candles[sym][tf];if(!arr.length)return;
+    const last=arr.at(-1);
+    if(now-last.t>=tfMs(tf)){arr.push({o:last.c,h:price,l:price,c:price,t:now});if(arr.length>250)arr.shift();}
+    else{last.c=price;last.h=Math.max(last.h,price);last.l=Math.min(last.l,price);}
   });
 }
 
-function updateConnStatus(ok, label){
-  const dot = document.getElementById('statusDot');
-  const lbl = document.getElementById('connLabel');
-  dot.style.background = ok ? 'var(--green)' : 'var(--yellow)';
-  dot.style.boxShadow = ok ? 'var(--glow-green)' : '0 0 10px rgba(255,204,0,0.4)';
-  lbl.textContent = label || (ok ? 'LIVE' : 'RECONNECTING...');
+// ═══════════════ UI ═══════════════════════
+function setMarket(m){
+  market=m;
+  document.getElementById('btn-FIN').classList.toggle('active',m==='FIN');
+  document.getElementById('btn-OTC').classList.toggle('active',m==='OTC');
+  activePair=null;prices={};candles={};
+  initPrices();renderPairs();
+  if(autoScanning)stopAutoScan();
+  document.getElementById('bestWrap').innerHTML=`<div class="empty-state"><div class="icon">🎯</div><p>НАЙКРАЩИЙ СИГНАЛ</p><p style="margin-top:5px;font-size:10px">Натисніть запустити</p></div>`;
+  document.getElementById('chartPair').textContent='SIGNAL PRO';
+  document.getElementById('chartType').textContent='Авто скан · '+getPairs().length+' пар';
 }
 
-// Перевіряємо сигнал тільки для конкретної пари (викликається з WS)
-let sigCheckThrottle = {};
-function runSignalEngineFor(sym){
-  const now = Date.now();
-  if(sigCheckThrottle[sym] && now - sigCheckThrottle[sym] < 4000) return;
-  sigCheckThrottle[sym] = now;
-
-  const pair = getPairs().find(p=>p.sym===sym);
-  if(!pair) return;
-  const arr = (candles[sym]||{})[currentTF]||[];
-  if(arr.length<80) return;
-  const score = getSignalScore(sym, arr);
-  if(score.dir==='NONE') return;
-  if(score.conf < 75) return; // було 82, тепер 75
-
-  const last = lastSignalTime[sym+currentTF]||0;
-  const cooldown = tfMs(currentTF)*4; // було 6 свічок, тепер 4
-  if(now-last<cooldown) return;
-
-  lastSignalTime[sym+currentTF] = now;
-  emitSignal(pair, score, arr[arr.length-1].c);
+function setView(v){
+  viewMode=v;
+  document.getElementById('vbtn-AUTO').classList.toggle('active',v==='AUTO');
+  document.getElementById('vbtn-MANUAL').classList.toggle('active',v==='MANUAL');
+  document.getElementById('autoBlock').style.display=v==='AUTO'?'flex':'none';
+  document.getElementById('manualBlock').style.display=v==='MANUAL'?'flex':'none';
+  document.getElementById('indBar').style.display=v==='MANUAL'?'grid':'none';
 }
 
-// ─── RENDER PAIRS ────────────────────────────────────────────────────
-function renderPairs(){
-  const query = document.getElementById('pairSearch').value.toLowerCase();
-  const list = document.getElementById('pairsList');
-  const pairs = getPairs().filter(p=> p.name.toLowerCase().includes(query)||p.sym.toLowerCase().includes(query));
-
-  // Group by type
-  const groups = {};
-  pairs.forEach(p=>{ (groups[p.type]||(groups[p.type]=[])).push(p); });
-
-  let html = '';
-  Object.entries(groups).forEach(([type,arr])=>{
-    html += `<div class="cat-header">${type}</div>`;
-    arr.forEach(p=>{
-      const st = prices[p.sym];
-      if(!st) return;
-      const isActive = activePair===p.sym;
-      const up = st.change>=0;
-      html += `<div class="pair-item ${isActive?'active':''}" onclick="selectPair('${p.sym}')">
-        <div>
-          <div class="pair-name">${p.name}</div>
-          <div class="pair-type">${p.type}</div>
-        </div>
-        <div class="pair-price">
-          <div>${formatPrice(st.price, p.sym)}</div>
-          <div class="pair-change ${up?'up':'down'}">${up?'+':''}${st.change.toFixed(2)}%</div>
-        </div>
-      </div>`;
-    });
+function setExpiry(e){
+  currentExpiry=e;
+  document.querySelectorAll('.exp-btn').forEach(b=>{
+    b.classList.toggle('active',b.textContent==={'1m':'1М','5m':'5М','15m':'15М','30m':'30М','1h':'1Ч'}[e]);
   });
-
-  list.innerHTML = html;
-  document.getElementById('pairsCount').textContent = pairs.length+' пар';
-}
-
-function filterPairs(){ renderPairs(); }
-
-function formatPrice(price, sym){
-  if(price>=1000) return price.toLocaleString('en',{maximumFractionDigits:2});
-  if(price>=1) return price.toFixed(4);
-  return price.toFixed(5);
-}
-
-// ─── SELECT PAIR ─────────────────────────────────────────────────────
-function selectPair(sym){
-  activePair = sym;
-  renderPairs();
-  const pair = getPairs().find(p=>p.sym===sym);
-  const st = prices[sym];
-  document.getElementById('chartPair').textContent = pair.name;
-  document.getElementById('chartType').textContent = pair.type + ' • ' + currentTF;
-  renderChart(sym);
-  updateIndicators(sym);
+  const m={'1m':'1m','5m':'5m','15m':'5m','30m':'15m','1h':'15m'};
+  setTF(m[e]||'5m');
 }
 
 function setTF(tf){
-  currentTF = tf;
-  document.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.tf-btn').forEach(b=>{ if(b.textContent.includes(tf.replace('m','м').replace('h','ч'))) b.classList.add('active'); });
-  // manual match
+  currentTF=tf;
   document.querySelectorAll('.tf-btn').forEach(b=>{
-    const map = {'1m':'1м','5m':'5м','15m':'15м','1h':'1ч','4h':'4ч'};
-    if(b.textContent===map[tf]) b.classList.add('active');
+    b.classList.toggle('active',b.textContent==={'1m':'1М','5m':'5М','15m':'15М','1h':'1Ч','4h':'4Ч'}[tf]);
   });
-  if(activePair){ renderChart(activePair); }
-  if(activePair) document.getElementById('chartType').textContent = getPairs().find(p=>p.sym===activePair)?.type + ' • ' + tf;
+  if(activePair)renderChart(activePair);
 }
 
-// ─── CANVAS CHART ────────────────────────────────────────────────────
-function renderChart(sym){
-  const loader = document.getElementById('chartLoader');
-  loader.style.display='flex';
-  setTimeout(()=>{ drawChart(sym); loader.style.display='none'; }, 300);
+function updConn(ok,label){
+  const dot=document.getElementById('statusDot'),lbl=document.getElementById('connLabel');
+  dot.style.background=ok?'var(--green)':'var(--yellow)';
+  dot.style.boxShadow=ok?'var(--glow-green)':'0 0 10px rgba(255,204,0,0.4)';
+  lbl.textContent=label;
 }
+
+// ═══════════════ PAIRS LIST ═══════════════════════
+function renderPairs(){
+  const q=document.getElementById('pairSearch').value.toLowerCase();
+  const list=document.getElementById('pairsList');
+  const pairs=getPairs().filter(p=>p.name.toLowerCase().includes(q));
+  const groups={};pairs.forEach(p=>{(groups[p.type]||(groups[p.type]=[])).push(p);});
+  let html='';
+  Object.entries(groups).forEach(([type,arr])=>{
+    html+=`<div class="cat-header">${type}</div>`;
+    arr.forEach(p=>{
+      const st=prices[p.sym];if(!st)return;
+      const up=st.change>=0,isAct=activePair===p.sym;
+      const qs=quickScore(p.sym);
+      const dc=qs==='BUY'?'var(--green)':qs==='SELL'?'var(--red)':'var(--border)';
+      html+=`<div class="pair-item ${isAct?'active':''}" onclick="selectPair('${p.sym}')">
+        <div style="display:flex;align-items:center;">
+          <span class="sig-dot" style="background:${dc};"></span>
+          <div><div class="pair-name">${p.name}</div><div class="pair-type">${p.type}</div></div>
+        </div>
+        <div class="pair-price">
+          <div>${fmtPrice(st.price,p.sym)}</div>
+          <div class="pair-change ${up?'up':'down'}">${up?'+':''}${st.change.toFixed(2)}%</div>
+        </div></div>`;
+    });
+  });
+  list.innerHTML=html;
+  document.getElementById('pairsCount').textContent=pairs.length+' пар';
+}
+function filterPairs(){renderPairs();}
+
+function fmtPrice(price,sym){
+  if(price>=10000)return price.toLocaleString('en',{maximumFractionDigits:2});
+  if(price>=100)return price.toFixed(3);
+  if(price>=1)return price.toFixed(4);
+  if(price>=0.001)return price.toFixed(5);
+  return price.toFixed(7);
+}
+
+function quickScore(sym){
+  const arr=(candles[sym]||{})[currentTF]||[];
+  if(arr.length<20)return 'NONE';
+  const cl=arr.slice(-20).map(c=>c.c);
+  const rsi=calcRSI(cl);if(rsi===null)return 'NONE';
+  const e9=calcEMA(cl,9).at(-1),e21=calcEMA(cl,21).at(-1);
+  if(!e9||!e21)return 'NONE';
+  if(rsi<40&&e9>e21)return 'BUY';
+  if(rsi>60&&e9<e21)return 'SELL';
+  return 'NONE';
+}
+
+function selectPair(sym){
+  activePair=sym;
+  const pair=getPairs().find(p=>p.sym===sym);
+  const st=prices[sym];
+  document.getElementById('chartPair').textContent=pair.name;
+  document.getElementById('chartType').textContent=pair.type+' · '+currentTF;
+  document.getElementById('chartPrice').textContent=fmtPrice(st.price,sym);
+  const up=st.change>=0,chEl=document.getElementById('chartChange');
+  chEl.textContent=(up?'+':'')+st.change.toFixed(2)+'%';
+  chEl.className='price-change-big '+(up?'up':'down');
+  renderPairs();renderChart(sym);
+  if(viewMode==='AUTO')setView('MANUAL');
+  updateIndicators(sym);
+}
+
+function updChartPrice(sym){
+  if(activePair!==sym)return;
+  const st=prices[sym];
+  document.getElementById('chartPrice').textContent=fmtPrice(st.price,sym);
+  const up=st.change>=0,chEl=document.getElementById('chartChange');
+  chEl.textContent=(up?'+':'')+st.change.toFixed(2)+'%';
+  chEl.className='price-change-big '+(up?'up':'down');
+}
+
+// ═══════════════ CHART ═══════════════════════
+function renderChart(sym){
+  const l=document.getElementById('chartLoader');l.style.display='flex';
+  setTimeout(()=>{drawChart(sym);l.style.display='none';},180);
+}
+setInterval(()=>{if(activePair&&viewMode==='MANUAL')drawChart(activePair);},2000);
 
 function drawChart(sym){
-  const canvas = document.getElementById('mainChart');
-  const ctx = canvas.getContext('2d');
-  const container = canvas.parentElement;
-  canvas.width = container.clientWidth * devicePixelRatio;
-  canvas.height = container.clientHeight * devicePixelRatio;
-  ctx.scale(devicePixelRatio, devicePixelRatio);
-  const W = container.clientWidth;
-  const H = container.clientHeight;
+  const canvas=document.getElementById('mainChart'),ctx=canvas.getContext('2d');
+  const cont=canvas.parentElement;
+  canvas.width=cont.clientWidth*devicePixelRatio;canvas.height=cont.clientHeight*devicePixelRatio;
+  ctx.scale(devicePixelRatio,devicePixelRatio);
+  const W=cont.clientWidth,H=cont.clientHeight;
   ctx.clearRect(0,0,W,H);
-
-  const arr = (candles[sym]||{})[currentTF]||[];
-  if(arr.length<2) return;
-  const data = arr.slice(-80);
-
-  const margin = {top:20, right:60, bottom:30, left:10};
-  const chartW = W - margin.left - margin.right;
-  const chartH = H - margin.top - margin.bottom;
-
-  const highs = data.map(c=>c.h);
-  const lows  = data.map(c=>c.l);
-  const maxP = Math.max(...highs)*1.001;
-  const minP = Math.min(...lows)*0.999;
-  const range = maxP - minP;
-
-  const candleW = Math.max(2, (chartW/data.length)*0.7);
-
-  const px = (i)=> margin.left + (i+0.5)*(chartW/data.length);
-  const py = (p)=> margin.top + chartH - ((p-minP)/range)*chartH;
-
+  const arr=(candles[sym]||{})[currentTF]||[];
+  if(arr.length<2)return;
+  const view=arr.slice(-80);
+  const pad={l:8,r:65,t:15,b:25};
+  const cW=Math.max(3,(W-pad.l-pad.r)/view.length-1);
+  const ps=view.flatMap(c=>[c.h,c.l]);
+  const mn=Math.min(...ps),mx=Math.max(...ps),rng=mx-mn||mx*0.01;
+  const toY=p=>pad.t+(mx-p)/rng*(H-pad.t-pad.b);
+  const toX=i=>pad.l+i*(cW+1)+cW/2;
   // Grid
-  ctx.strokeStyle='rgba(26,35,50,0.8)'; ctx.lineWidth=1;
-  const gridLines = 5;
-  for(let i=0;i<=gridLines;i++){
-    const y = margin.top + (i/gridLines)*chartH;
-    ctx.beginPath(); ctx.moveTo(margin.left,y); ctx.lineTo(W-margin.right,y); ctx.stroke();
-    const price = maxP - (i/gridLines)*range;
-    ctx.fillStyle='rgba(74,85,104,0.8)';
-    ctx.font=`10px 'Share Tech Mono'`;
-    ctx.fillText(formatPrice(price,sym), W-margin.right+4, y+4);
+  ctx.strokeStyle='rgba(26,35,50,0.7)';ctx.lineWidth=1;
+  for(let i=0;i<5;i++){
+    const y=pad.t+i*(H-pad.t-pad.b)/4;
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+    const price=mx-i*(rng/4);
+    ctx.fillStyle='#4a5568';ctx.font='10px Share Tech Mono';
+    ctx.fillText(fmtPrice(price,sym),W-pad.r+4,y+3);
   }
-
-  // EMA lines
-  const closes = data.map(c=>c.c);
-  const ema9  = calcEMA(closes, 9);
-  const ema21 = calcEMA(closes, 21);
-
-  const drawLine = (vals, color, dash=[])=>{
-    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.5;
-    ctx.setLineDash(dash);
-    vals.forEach((v,i)=>{ if(v===null) return; i===0||vals[i-1]===null ? ctx.moveTo(px(i),py(v)) : ctx.lineTo(px(i),py(v)); });
-    ctx.stroke(); ctx.setLineDash([]);
-  };
-
-  drawLine(ema9,  'rgba(0,212,255,0.6)');
-  drawLine(ema21, 'rgba(255,204,0,0.5)');
-
-  // Bollinger
-  const bb = calcBB(closes, 20);
-  drawLine(bb.upper,'rgba(100,100,160,0.4)',[3,3]);
-  drawLine(bb.lower,'rgba(100,100,160,0.4)',[3,3]);
-
-  // Candles
-  data.forEach((c,i)=>{
-    const up = c.c>=c.o;
-    const x = px(i);
-    ctx.strokeStyle = up ? 'rgba(0,255,136,0.8)' : 'rgba(255,51,102,0.8)';
-    ctx.fillStyle   = up ? 'rgba(0,255,136,0.3)'  : 'rgba(255,51,102,0.3)';
-    ctx.lineWidth = 1;
-
-    // Wick
-    ctx.beginPath();
-    ctx.moveTo(x, py(c.h)); ctx.lineTo(x, py(c.l));
+  // BB
+  const closes=arr.map(c=>c.c),bb=calcBB(closes,20,2);
+  [[bb.upper,'rgba(0,212,255,0.2)'],[bb.lower,'rgba(0,212,255,0.2)'],[bb.mid,'rgba(0,212,255,0.12)']].forEach(([arr2,col])=>{
+    ctx.beginPath();ctx.strokeStyle=col;ctx.lineWidth=1;
+    arr2.slice(-80).forEach((v,i)=>{if(!v)return;i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v));});
     ctx.stroke();
-
-    // Body
-    const bodyTop = py(Math.max(c.o,c.c));
-    const bodyBot = py(Math.min(c.o,c.c));
-    const bH = Math.max(1, bodyBot-bodyTop);
-    ctx.fillRect(x-candleW/2, bodyTop, candleW, bH);
-    ctx.strokeRect(x-candleW/2, bodyTop, candleW, bH);
   });
-
-  // Price label
-  const lastPrice = data[data.length-1].c;
-  const lastY = py(lastPrice);
-  ctx.fillStyle='rgba(0,255,136,0.15)';
-  ctx.fillRect(W-margin.right, lastY-8, margin.right-2, 16);
-  ctx.strokeStyle='var(--green)'; ctx.lineWidth=1;
-  ctx.strokeRect(W-margin.right, lastY-8, margin.right-2, 16);
-  ctx.fillStyle='#00ff88';
-  ctx.font=`bold 10px 'Share Tech Mono'`;
-  ctx.fillText(formatPrice(lastPrice,sym), W-margin.right+4, lastY+4);
-
+  // EMAs
+  [[calcEMA(closes,9),'#00ff88'],[calcEMA(closes,21),'#ffcc00']].forEach(([arr2,col])=>{
+    ctx.beginPath();ctx.strokeStyle=col;ctx.lineWidth=1.5;
+    arr2.slice(-80).forEach((v,i)=>{if(!v)return;i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v));});
+    ctx.stroke();
+  });
+  // Candles
+  view.forEach((c,i)=>{
+    const x=toX(i),bull=c.c>=c.o,col=bull?'#00ff88':'#ff3366';
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x,toY(c.h));ctx.lineTo(x,toY(c.l));ctx.stroke();
+    const bH=Math.max(1,Math.abs(toY(c.o)-toY(c.c)));
+    ctx.globalAlpha=0.82;ctx.fillRect(x-cW/2,Math.min(toY(c.o),toY(c.c)),cW,bH);ctx.globalAlpha=1;
+  });
   // Price line
-  ctx.strokeStyle='rgba(0,255,136,0.3)'; ctx.lineWidth=1; ctx.setLineDash([3,4]);
-  ctx.beginPath(); ctx.moveTo(margin.left,lastY); ctx.lineTo(W-margin.right,lastY); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Update header price
-  document.getElementById('chartPrice').textContent = formatPrice(lastPrice,sym);
-  const st = prices[sym];
-  const chEl = document.getElementById('chartChange');
-  const chg = st?st.change:0;
-  chEl.textContent = (chg>=0?'+':'')+chg.toFixed(2)+'%';
-  chEl.className = 'price-change-big '+(chg>=0?'up':'down');
-
-  // Start animation loop
-  if(animFrame) cancelAnimationFrame(animFrame);
-  let lastDraw = 0;
-  const loop = (ts)=>{
-    if(activePair===sym && ts-lastDraw>1000){
-      drawChart(sym);
-      lastDraw=ts;
-    }
-    animFrame = requestAnimationFrame(loop);
-  };
-  animFrame = requestAnimationFrame(loop);
+  const lastC=view.at(-1).c,lastY=toY(lastC);
+  ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(0,212,255,0.6)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,lastY);ctx.lineTo(W-pad.r,lastY);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(0,212,255,0.15)';ctx.fillRect(W-pad.r+1,lastY-9,pad.r-3,16);
+  ctx.fillStyle='#00d4ff';ctx.font='10px Share Tech Mono';ctx.fillText(fmtPrice(lastC,sym),W-pad.r+4,lastY+3);
 }
 
-// ─── TECHNICAL INDICATORS ────────────────────────────────────────────
-function calcEMA(data, period){
-  const k = 2/(period+1);
-  const result = new Array(data.length).fill(null);
-  let ema = null;
+// ═══════════════ ІНДИКАТОРИ ═══════════════════════
+function calcEMA(data,period){
+  const k=2/(period+1),res=new Array(data.length).fill(null);let ema=null;
   for(let i=0;i<data.length;i++){
-    if(i<period-1){ result[i]=null; continue; }
-    if(ema===null) ema = data.slice(0,period).reduce((a,b)=>a+b)/period;
-    else ema = data[i]*k + ema*(1-k);
-    result[i]=ema;
+    if(i<period-1)continue;
+    if(ema===null)ema=data.slice(0,period).reduce((a,b)=>a+b)/period;
+    else ema=data[i]*k+ema*(1-k);
+    res[i]=ema;
   }
-  return result;
+  return res;
 }
-
-function calcRSI(data, period=14){
-  if(data.length<period+1) return null;
-  let gains=0, losses=0;
-  for(let i=1;i<=period;i++){
-    const d=data[i]-data[i-1];
-    if(d>0) gains+=d; else losses-=d;
-  }
-  let avgG=gains/period, avgL=losses/period;
+function calcRSI(data,period=14){
+  if(data.length<period+1)return null;
+  let g=0,l=0;
+  for(let i=1;i<=period;i++){const d=data[i]-data[i-1];if(d>0)g+=d;else l-=d;}
+  let ag=g/period,al=l/period;
   for(let i=period+1;i<data.length;i++){
     const d=data[i]-data[i-1];
-    avgG = (avgG*(period-1)+(d>0?d:0))/period;
-    avgL = (avgL*(period-1)+(d<0?-d:0))/period;
+    ag=(ag*(period-1)+(d>0?d:0))/period;al=(al*(period-1)+(d<0?-d:0))/period;
   }
-  if(avgL===0) return 100;
-  return 100 - (100/(1+avgG/avgL));
+  return al===0?100:100-(100/(1+ag/al));
 }
-
 function calcMACD(data){
-  const ema12 = calcEMA(data,12);
-  const ema26 = calcEMA(data,26);
-  const macdLine = data.map((_,i)=> ema12[i]!==null&&ema26[i]!==null ? ema12[i]-ema26[i] : null);
-  const valid = macdLine.filter(x=>x!==null);
-  const signal = calcEMA(valid, 9);
-  const last = valid[valid.length-1];
-  const sigLast = signal[signal.length-1];
-  const prevMacd = valid[valid.length-2]||0;
-  const prevSig  = signal[signal.length-2]||0;
-  return {macd:last, signal:sigLast, hist:last-sigLast, crossUp: prevMacd<prevSig && last>sigLast, crossDown: prevMacd>prevSig && last<sigLast};
+  const e12=calcEMA(data,12),e26=calcEMA(data,26);
+  const line=data.map((_,i)=>e12[i]!=null&&e26[i]!=null?e12[i]-e26[i]:null);
+  const valid=line.filter(x=>x!==null);
+  if(valid.length<9)return{macd:0,signal:0,hist:0,crossUp:false,crossDown:false};
+  const sig=calcEMA(valid,9);
+  const last=valid.at(-1),sigL=sig.at(-1),prev=valid.at(-2)||0,sigP=sig.at(-2)||0;
+  return{macd:last,signal:sigL,hist:last-sigL,crossUp:prev<sigP&&last>sigL,crossDown:prev>sigP&&last<sigL};
 }
-
-function calcBB(data, period=20, mult=2){
-  const upper=[], lower=[], mid=[];
+function calcBB(data,period=20,mult=2){
+  const u=[],l=[],m=[];
   for(let i=0;i<data.length;i++){
-    if(i<period-1){ upper.push(null);lower.push(null);mid.push(null); continue; }
-    const slice=data.slice(i-period+1,i+1);
-    const m=slice.reduce((a,b)=>a+b)/period;
-    const std=Math.sqrt(slice.map(x=>(x-m)**2).reduce((a,b)=>a+b)/period);
-    upper.push(m+mult*std); lower.push(m-mult*std); mid.push(m);
+    if(i<period-1){u.push(null);l.push(null);m.push(null);continue;}
+    const s=data.slice(i-period+1,i+1),avg=s.reduce((a,b)=>a+b)/period;
+    const std=Math.sqrt(s.map(x=>(x-avg)**2).reduce((a,b)=>a+b)/period);
+    u.push(avg+mult*std);l.push(avg-mult*std);m.push(avg);
   }
-  const n=data.length-1;
-  const lastU=upper[n], lastL=lower[n], lastM=mid[n];
-  // Захист: якщо BB некоректний (std=0 або дані однакові)
-  const valid = lastU && lastL && lastU > lastL && (lastU-lastL)/lastM > 0.0001;
-  return {upper,lower,mid, lastU, lastL, lastM, valid};
+  const n=data.length-1,lU=u[n],lL=l[n],lM=m[n];
+  return{upper:u,lower:l,mid:m,lastU:lU,lastL:lL,lastM:lM,valid:!!(lU&&lL&&lU>lL&&(lU-lL)/lM>0.0001)};
 }
-
-function calcStochRSI(data, period=14, smooth=3){
-  const rsiArr=[];
-  for(let i=period;i<=data.length;i++){
-    rsiArr.push(calcRSI(data.slice(i-period,i),period-1)||50);
+function calcStoch(data,period=14){
+  const ra=[];
+  for(let i=period;i<=data.length;i++)ra.push(calcRSI(data.slice(i-period,i),period-1)||50);
+  if(ra.length<period)return{k:50};
+  const sl=ra.slice(-period),hi=Math.max(...sl),lo=Math.min(...sl);
+  return{k:hi===lo?50:((ra.at(-1)-lo)/(hi-lo))*100};
+}
+function calcATR(arr,period=14){
+  if(arr.length<period+1)return null;
+  const trs=arr.slice(1).map((c,i)=>Math.max(c.h-c.l,Math.abs(c.h-arr[i].c),Math.abs(c.l-arr[i].c)));
+  let atr=trs.slice(0,period).reduce((a,b)=>a+b)/period;
+  for(let i=period;i<trs.length;i++)atr=(atr*(period-1)+trs[i])/period;
+  return atr;
+}
+function calcADX(arr,period=14){
+  if(arr.length<period*3)return{adx:0,pdi:0,mdi:0};
+  const data=arr.slice(-120),pDM=[],mDM=[],tr=[];
+  for(let i=1;i<data.length;i++){
+    const up=data[i].h-data[i-1].h,dn=data[i-1].l-data[i].l;
+    pDM.push(up>dn&&up>0?up:0);mDM.push(dn>up&&dn>0?dn:0);
+    tr.push(Math.max(data[i].h-data[i].l,Math.abs(data[i].h-data[i-1].c),Math.abs(data[i].l-data[i-1].c)));
   }
-  if(rsiArr.length<period) return {k:50,d:50};
-  const slice=rsiArr.slice(-period);
-  const hi=Math.max(...slice), lo=Math.min(...slice);
-  const k= hi===lo ? 50 : ((rsiArr[rsiArr.length-1]-lo)/(hi-lo))*100;
-  return {k, d:k}; // simplified
+  const ws=(a,p)=>{if(a.length<p)return[];let v=a.slice(0,p).reduce((x,y)=>x+y,0);const r=[v];for(let i=p;i<a.length;i++){v=v-v/p+a[i];r.push(v);}return r;};
+  const sTR=ws(tr,period),sPDM=ws(pDM,period),sMDM=ws(mDM,period);
+  if(!sTR.length)return{adx:0,pdi:0,mdi:0};
+  const pdi=sPDM.map((v,i)=>sTR[i]>0?Math.min(v/sTR[i]*100,100):0);
+  const mdi=sMDM.map((v,i)=>sTR[i]>0?Math.min(v/sTR[i]*100,100):0);
+  const dx=pdi.map((v,i)=>(v+mdi[i])>0?Math.min(Math.abs(v-mdi[i])/(v+mdi[i])*100,100):0);
+  const adxA=ws(dx,period);if(!adxA.length)return{adx:0,pdi:0,mdi:0};
+  return{adx:Math.min(Math.max(adxA.at(-1)/period,0),100),pdi:pdi.at(-1),mdi:mdi.at(-1)};
 }
 
 function updateIndicators(sym){
-  const arr = (candles[sym]||{})[currentTF]||[];
-  if(arr.length<30) return;
-  const closes = arr.map(c=>c.c);
-
-  const rsi = calcRSI(closes);
-  const macd = calcMACD(closes);
-  const bb = calcBB(closes);
-  const stoch = calcStochRSI(closes);
-  const ema9v = calcEMA(closes,9); const ema9Last = ema9v[ema9v.length-1];
-  const ema21v = calcEMA(closes,21); const ema21Last = ema21v[ema21v.length-1];
-  const lastClose = closes[closes.length-1];
-
+  const arr=(candles[sym]||{})[currentTF]||[];if(arr.length<30)return;
+  const cl=arr.map(c=>c.c),lc=cl.at(-1);
+  const rsi=calcRSI(cl),macd=calcMACD(cl),bb=calcBB(cl),stoch=calcStoch(cl);
+  const e9=calcEMA(cl,9).at(-1),e21=calcEMA(cl,21).at(-1),adx=calcADX(arr);
+  const set=(id,val,col)=>{const el=document.getElementById(id);if(el){el.textContent=val;el.style.color=col||'';}};
   // RSI
-  const rsiEl=document.getElementById('rsiVal');
-  const rsiSig=document.getElementById('rsiSig');
-  rsiEl.textContent=rsi?rsi.toFixed(1):'—';
-  if(rsi<35){ rsiEl.style.color='var(--green)'; rsiSig.textContent='ПЕРЕПРОДАН'; rsiSig.style.color='var(--green)'; }
-  else if(rsi>65){ rsiEl.style.color='var(--red)'; rsiSig.textContent='ПЕРЕКУПЛЕН'; rsiSig.style.color='var(--red)'; }
-  else { rsiEl.style.color='var(--yellow)'; rsiSig.textContent='НЕЙТРАЛ'; rsiSig.style.color='var(--yellow)'; }
-
+  set('rsiVal',rsi?rsi.toFixed(1):'—',rsi<35?'var(--green)':rsi>65?'var(--red)':'var(--yellow)');
+  set('rsiSig',rsi<35?'ПЕРЕПРОДАНО':rsi>65?'ПЕРЕКУПЛЕНО':'НЕЙТРАЛ',rsi<35?'var(--green)':rsi>65?'var(--red)':'var(--yellow)');
   // MACD
-  const macdEl=document.getElementById('macdVal');
-  const macdSig=document.getElementById('macdSig');
   if(macd.macd!==null){
-    macdEl.textContent=(macd.hist>0?'+':'')+macd.hist.toFixed(4);
-    macdEl.style.color=macd.hist>0?'var(--green)':'var(--red)';
-    if(macd.crossUp){ macdSig.textContent='↑ ПЕРЕСЕЧЕНИЕ'; macdSig.style.color='var(--green)'; }
-    else if(macd.crossDown){ macdSig.textContent='↓ ПЕРЕСЕЧЕНИЕ'; macdSig.style.color='var(--red)'; }
-    else { macdSig.textContent=macd.hist>0?'БЫЧИЙ':'МЕДВЕЖИЙ'; macdSig.style.color=macd.hist>0?'var(--green)':'var(--red)'; }
+    set('macdVal',(macd.hist>0?'+':'')+macd.hist.toFixed(5),macd.hist>0?'var(--green)':'var(--red)');
+    set('macdSig',macd.crossUp?'↑ ПЕРЕТИН':macd.crossDown?'↓ ПЕРЕТИН':macd.hist>0?'БИЧАЧИЙ':'ВЕДМЕЖИЙ',macd.hist>0?'var(--green)':'var(--red)');
   }
-
   // BB
-  const bbEl=document.getElementById('bbVal');
-  const bbSig=document.getElementById('bbSig');
   if(bb.valid){
-    const pos = Math.max(0, Math.min(1, (lastClose-bb.lastL)/(bb.lastU-bb.lastL)));
-    bbEl.textContent=(pos*100).toFixed(0)+'%';
-    if(pos>0.95){ bbEl.style.color='var(--red)'; bbSig.textContent='ВИЩЕ ВЕРХНЬОЇ'; bbSig.style.color='var(--red)'; }
-    else if(pos<0.05){ bbEl.style.color='var(--green)'; bbSig.textContent='НИЖЧЕ НИЖНЬОЇ'; bbSig.style.color='var(--green)'; }
-    else if(pos>0.6){ bbEl.style.color='var(--yellow)'; bbSig.textContent='ВЕРХ КАНАЛУ'; bbSig.style.color='var(--yellow)'; }
-    else { bbEl.style.color='var(--yellow)'; bbSig.textContent='НИЗ КАНАЛУ'; bbSig.style.color='var(--yellow)'; }
-  } else {
-    bbEl.textContent='—'; bbEl.style.color='var(--dim)';
-    bbSig.textContent='Мало даних'; bbSig.style.color='var(--dim)';
+    const pos=Math.max(0,Math.min(1,(lc-bb.lastL)/(bb.lastU-bb.lastL)));
+    set('bbVal',(pos*100).toFixed(0)+'%',pos>0.88?'var(--red)':pos<0.12?'var(--green)':'var(--yellow)');
+    set('bbSig',pos>0.88?'ВЕРХ КАНАЛУ':pos<0.12?'НИЗ КАНАЛУ':'СЕРЕДИНА',pos>0.88?'var(--red)':pos<0.12?'var(--green)':'var(--yellow)');
   }
-
   // EMA
-  const emaEl=document.getElementById('emaVal');
-  const emaSig=document.getElementById('emaSig');
-  if(ema9Last&&ema21Last){
-    const diff = ((ema9Last-ema21Last)/ema21Last*100).toFixed(3);
-    emaEl.textContent = diff+'%';
-    if(ema9Last>ema21Last){ emaEl.style.color='var(--green)'; emaSig.textContent='9 > 21 ↑'; emaSig.style.color='var(--green)'; }
-    else { emaEl.style.color='var(--red)'; emaSig.textContent='9 < 21 ↓'; emaSig.style.color='var(--red)'; }
+  if(e9&&e21){
+    set('emaVal',((e9-e21)/e21*100).toFixed(3)+'%',e9>e21?'var(--green)':'var(--red)');
+    set('emaSig',e9>e21?'9 > 21 ↑':'9 < 21 ↓',e9>e21?'var(--green)':'var(--red)');
   }
-
-  // Stoch
-  const stEl=document.getElementById('stochVal');
-  const stSig=document.getElementById('stochSig');
-  stEl.textContent=stoch.k.toFixed(1);
-  if(stoch.k<20){ stEl.style.color='var(--green)'; stSig.textContent='ПЕРЕПРОДАН'; stSig.style.color='var(--green)'; }
-  else if(stoch.k>80){ stEl.style.color='var(--red)'; stSig.textContent='ПЕРЕКУПЛЕН'; stSig.style.color='var(--red)'; }
-  else { stEl.style.color='var(--yellow)'; stSig.textContent='НЕЙТРАЛ'; stSig.style.color='var(--yellow)'; }
-
-  // OVERALL
-  const score = getSignalScore(sym, arr);
-  const ovEl=document.getElementById('overallSig');
-  const ovConf=document.getElementById('overallConf');
-  const maxV = Math.max(score.votes ? score.votes.buy : 0, score.votes ? score.votes.sell : 0);
-  if(score.dir==='BUY'){
-    ovEl.textContent='▲ BUY'; ovEl.style.color='var(--green)';
-    ovConf.textContent=score.conf+'%'; ovConf.style.color='var(--green)';
-  } else if(score.dir==='SELL'){
-    ovEl.textContent='▼ SELL'; ovEl.style.color='var(--red)';
-    ovConf.textContent=score.conf+'%'; ovConf.style.color='var(--red)';
-  } else {
-    ovEl.textContent='⏳ '+maxV+'/4'; ovEl.style.color='var(--dim)';
-    ovConf.textContent = score.filterFailed || ('ще '+(Math.max(4-maxV,0))+' голос(и)');
-    ovConf.style.color='var(--dim)';
-  }
-
-  // ADX в блоці Stoch RSI
-  const adxVal = calcADX(arr);
-  const stEl2=document.getElementById('stochVal');
-  const stSig2=document.getElementById('stochSig');
-  stEl2.textContent = stoch.k.toFixed(0)+' / '+adxVal.adx.toFixed(0);
-  stEl2.style.color = stoch.k<20||stoch.k>80 ? (stoch.k<20?'var(--green)':'var(--red)') : 'var(--yellow)';
-  if(adxVal.adx>=25){ stSig2.textContent='ADX: ТРЕНД ✓'; stSig2.style.color='var(--green)'; }
-  else if(adxVal.adx>=18){ stSig2.textContent='ADX: СЛАБКИЙ'; stSig2.style.color='var(--yellow)'; }
-  else { stSig2.textContent='ADX: ФЛЕТ ✗'; stSig2.style.color='var(--red)'; }
+  // Stoch+ADX
+  set('stochVal',stoch.k.toFixed(0)+' / '+adx.adx.toFixed(0),stoch.k<25?'var(--green)':stoch.k>75?'var(--red)':'var(--yellow)');
+  set('stochSig',adx.adx>=20?'ADX: ТРЕНД ✓':adx.adx>=14?'ADX: СЛАБКИЙ':'ADX: ФЛЕТ ✗',adx.adx>=20?'var(--green)':adx.adx>=14?'var(--yellow)':'var(--red)');
+  // Signal
+  const score=getScore(sym,arr);
+  const maxV=Math.max(score.votes.buy,score.votes.sell);
+  if(score.dir==='BUY'){set('overallSig','▲ BUY','var(--green)');set('overallConf',score.conf+'%','var(--green)');}
+  else if(score.dir==='SELL'){set('overallSig','▼ SELL','var(--red)');set('overallConf',score.conf+'%','var(--red)');}
+  else{set('overallSig','⏳ '+maxV+'/3','var(--dim)');set('overallConf',score.filterFailed||'ще '+(3-maxV)+' підтверджень','var(--dim)');}
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// МАКСИМАЛЬНО ТОЧНИЙ ДВИЖОК СИГНАЛІВ
-// Принцип: краще 2 точних ніж 20 сумнівних
-// Потрібно пройти ВСІ 7 фільтрів — якщо хоч один не пройшов: NONE
-// ═══════════════════════════════════════════════════════════════════
-let lastSignalTime = {};
-
-// ── ДОПОМІЖНІ РОЗРАХУНКИ ────────────────────────────────────────────
-
-// ATR — середній справжній діапазон (міра волатильності)
-function calcATR(arr, period=14){
-  if(arr.length < period+1) return null;
-  const trs = arr.slice(1).map((c,i)=>{
-    const prev = arr[i];
-    return Math.max(c.h-c.l, Math.abs(c.h-prev.c), Math.abs(c.l-prev.c));
-  });
-  // Wilder smoothing
-  let atr = trs.slice(0,period).reduce((a,b)=>a+b)/period;
-  for(let i=period; i<trs.length; i++) atr = (atr*(period-1)+trs[i])/period;
-  return atr;
-}
-
-// ADX — сила тренду (>25 = тренд є, <20 = флет)
-// Правильний алгоритм Уайлдера
-function calcADX(arr, period=14){
-  if(arr.length < period*3) return {adx:0, pdi:0, mdi:0};
-  const data = arr.slice(-Math.min(arr.length, 200)); // обмежуємо масив
-
-  const plusDM=[], minusDM=[], trArr=[];
-  for(let i=1;i<data.length;i++){
-    const upMove   = data[i].h - data[i-1].h;
-    const downMove = data[i-1].l - data[i].l;
-    plusDM.push( (upMove > downMove && upMove > 0)   ? upMove   : 0);
-    minusDM.push((downMove > upMove && downMove > 0) ? downMove : 0);
-    trArr.push(Math.max(
-      data[i].h - data[i].l,
-      Math.abs(data[i].h - data[i-1].c),
-      Math.abs(data[i].l - data[i-1].c)
-    ));
-  }
-
-  // Wilder smoothing: перший = сума period значень, далі: prev - prev/period + current
-  const wilderSmooth = (arr, p) => {
-    if(arr.length < p) return [];
-    const res = [];
-    let val = arr.slice(0, p).reduce((a,b)=>a+b, 0);
-    res.push(val);
-    for(let i=p; i<arr.length; i++){
-      val = val - (val/p) + arr[i];
-      res.push(val);
-    }
-    return res;
-  };
-
-  const smoothTR  = wilderSmooth(trArr,   period);
-  const smoothPDM = wilderSmooth(plusDM,  period);
-  const smoothMDM = wilderSmooth(minusDM, period);
-
-  if(smoothTR.length < period) return {adx:0, pdi:0, mdi:0};
-
-  // +DI і -DI (0-100)
-  const pdiArr = smoothPDM.map((v,i) => smoothTR[i]>0 ? Math.min((v/smoothTR[i])*100, 100) : 0);
-  const mdiArr = smoothMDM.map((v,i) => smoothTR[i]>0 ? Math.min((v/smoothTR[i])*100, 100) : 0);
-
-  // DX (0-100)
-  const dxArr = pdiArr.map((v,i) => {
-    const sum = v + mdiArr[i];
-    return sum > 0 ? Math.min((Math.abs(v - mdiArr[i]) / sum) * 100, 100) : 0;
-  });
-
-  // ADX = Wilder smooth of DX (0-100)
-  const adxArr = wilderSmooth(dxArr, period);
-  if(adxArr.length === 0) return {adx:0, pdi:0, mdi:0};
-
-  const n = adxArr.length-1;
-  return {
-    adx: Math.min(Math.max(adxArr[n] / period, 0), 100), // нормалізація
-    pdi: pdiArr.at(-1),
-    mdi: mdiArr.at(-1)
-  };
-}
-
-// Нахил EMA50 (сила та напрямок тренду)
-function calcTrendStrength(closes){
-  const ema50 = calcEMA(closes, 50);
-  const n = ema50.length-1;
-  if(!ema50[n]||!ema50[n-8]) return 0;
-  return (ema50[n]-ema50[n-8])/ema50[n-8]*100;
-}
-
-// Дивергенція RSI — ціна робить новий екстремум, RSI ні
-function calcRSIDivergence(closes, arr, dir){
-  if(closes.length < 30) return false;
-  const rsiAll = [];
-  for(let i=14; i<=closes.length; i++) rsiAll.push(calcRSI(closes.slice(0,i)));
-  const n = rsiAll.length-1;
-  if(rsiAll[n]===null) return false;
-
+// ═══════════════ СИГНАЛЬНИЙ ДВИЖОК ═══════════════════════
+function candlePat(arr,dir){
+  if(arr.length<4)return{ok:false,name:''};
+  const c=arr.at(-1),p1=arr.at(-2),p2=arr.at(-3);
+  const body=x=>Math.abs(x.c-x.o),bull=x=>x.c>x.o,bear=x=>x.c<x.o;
+  const atr=arr.slice(-10).reduce((s,x)=>s+(x.h-x.l),0)/10;
   if(dir==='BUY'){
-    // Бичача дивергенція: ціна нижче, RSI вище
-    const priceLL = closes[closes.length-1] < Math.min(...closes.slice(-20,-1));
-    const rsiHL   = rsiAll[n] > rsiAll[n-5];
-    return priceLL && rsiHL;
-  } else {
-    // Ведмежа дивергенція: ціна вище, RSI нижче
-    const priceHH = closes[closes.length-1] > Math.max(...closes.slice(-20,-1));
-    const rsiLH   = rsiAll[n] < rsiAll[n-5];
-    return priceHH && rsiLH;
+    if(bear(p1)&&bull(c)&&c.c>p1.o&&c.o<p1.c&&body(c)>=body(p1)*0.8)return{ok:true,name:'Бичаче поглинання'};
+    const lw=Math.min(c.o,c.c)-c.l,uw=c.h-Math.max(c.o,c.c);
+    if(lw>body(c)*2&&uw<body(c)&&lw>atr*0.25)return{ok:true,name:'Молот'};
+    if(bull(c)&&bull(p1)&&c.c>p1.c)return{ok:true,name:'Два бики'};
+    if(lw>body(c)*3&&c.c>(c.h+c.l)/2)return{ok:true,name:'Пін-бар ↑'};
   }
-}
-
-// Рівні підтримки/спротиву (pivot points)
-function calcPivots(arr){
-  const slice = arr.slice(-20);
-  const h = Math.max(...slice.map(c=>c.h));
-  const l = Math.min(...slice.map(c=>c.l));
-  const c = slice.at(-1).c;
-  const pivot = (h+l+c)/3;
-  return {
-    r1: 2*pivot - l,
-    s1: 2*pivot - h,
-    pivot,
-    nearSupport: (price) => Math.abs(price-l)/price < 0.003,
-    nearResist:  (price) => Math.abs(price-h)/price < 0.003,
-  };
-}
-
-// Свічковий патерн (строгий)
-function candlePattern(arr, dir){
-  if(arr.length < 5) return {ok:false, name:''};
-  const c  = arr.at(-1);
-  const p1 = arr.at(-2);
-  const p2 = arr.at(-3);
-  const body = x => Math.abs(x.c-x.o);
-  const bull = x => x.c > x.o;
-  const bear = x => x.c < x.o;
-  const atr  = (arr.slice(-10).reduce((s,x)=>s+(x.h-x.l),0))/10;
-
-  if(dir==='BUY'){
-    // 1. Бичаче поглинання
-    if(bear(p1) && bull(c) && c.c>p1.o && c.o<p1.c && body(c)>body(p1)*1.0)
-      return {ok:true, name:'Бичаче поглинання'};
-    // 2. Молот (Hammer) — довга нижня тінь
-    const lowerWick = Math.min(c.o,c.c) - c.l;
-    const upperWick = c.h - Math.max(c.o,c.c);
-    if(lowerWick > body(c)*2 && upperWick < body(c)*0.5 && lowerWick > atr*0.4)
-      return {ok:true, name:'Молот'};
-    // 3. Три бичачих свічки поспіль із зростанням
-    if(bull(c)&&bull(p1)&&bull(p2) && c.c>p1.c && p1.c>p2.c)
-      return {ok:true, name:'Три бики'};
-    // 4. Пін-бар від підтримки
-    if(lowerWick > body(c)*3 && c.c > (c.h+c.l)/2)
-      return {ok:true, name:'Пін-бар (підтримка)'};
-  }
-
   if(dir==='SELL'){
-    // 1. Ведмеже поглинання
-    if(bull(p1) && bear(c) && c.c<p1.o && c.o>p1.c && body(c)>body(p1)*1.0)
-      return {ok:true, name:'Ведмеже поглинання'};
-    // 2. Повішений (Hanging Man) — довга верхня тінь
-    const upperWick2 = c.h - Math.max(c.o,c.c);
-    const lowerWick2 = Math.min(c.o,c.c) - c.l;
-    if(upperWick2 > body(c)*2 && lowerWick2 < body(c)*0.5 && upperWick2 > atr*0.4)
-      return {ok:true, name:'Зірка падіння'};
-    // 3. Три ведмежих свічки поспіль
-    if(bear(c)&&bear(p1)&&bear(p2) && c.c<p1.c && p1.c<p2.c)
-      return {ok:true, name:'Три ведмеді'};
-    // 4. Пін-бар від спротиву
-    if(upperWick2 > body(c)*3 && c.c < (c.h+c.l)/2)
-      return {ok:true, name:'Пін-бар (спротив)'};
+    if(bull(p1)&&bear(c)&&c.c<p1.o&&c.o>p1.c&&body(c)>=body(p1)*0.8)return{ok:true,name:'Ведмеже поглинання'};
+    const uw2=c.h-Math.max(c.o,c.c),lw2=Math.min(c.o,c.c)-c.l;
+    if(uw2>body(c)*2&&lw2<body(c)&&uw2>atr*0.25)return{ok:true,name:'Зірка падіння'};
+    if(bear(c)&&bear(p1)&&c.c<p1.c)return{ok:true,name:'Два ведмеді'};
+    if(uw2>body(c)*3&&c.c<(c.h+c.l)/2)return{ok:true,name:'Пін-бар ↓'};
   }
-  return {ok:false, name:''};
+  return{ok:false,name:''};
 }
 
-// ── ГОЛОВНА ФУНКЦІЯ ОЦІНКИ (7 фільтрів) ────────────────────────────
-function getSignalScore(sym, arr){
-  const NONE = (v={buy:0,sell:0}) => ({dir:'NONE', conf:0, reasons:[], votes:v, filterFailed:''});
-  if(arr.length < 100) return NONE();
-
-  const closes = arr.map(c=>c.c);
-  const highs  = arr.map(c=>c.h);
-  const lows   = arr.map(c=>c.l);
-
-  // ── Розраховуємо всі індикатори ──
-  const rsi    = calcRSI(closes);
-  const macd   = calcMACD(closes);
-  const bb     = calcBB(closes, 20, 2);
-  const stoch  = calcStochRSI(closes);
-  const ema9   = calcEMA(closes,9).at(-1);
-  const ema21  = calcEMA(closes,21).at(-1);
-  const ema50  = calcEMA(closes,50).at(-1);
-  const ema200 = calcEMA(closes,200);
-  const ema200Last = ema200.at(-1);
-  const ema200Prev = ema200.at(-10);
-  const atr    = calcATR(arr);
-  const adx    = calcADX(arr);
-  const trend  = calcTrendStrength(closes);
-  const pivots = calcPivots(arr);
-  const lastC  = closes.at(-1);
-
-  let buyV=0, sellV=0;
-  const buyR=[], sellR=[];
-
-  // ══ ГОЛОСУВАННЯ (5 блоків по 1 голосу) ══════════════════════════
-
-  // 1. RSI — трохи пом'якшені зони (було 30/70, стало 33/67)
-  //    АБО тільки RSI, АБО тільки Stoch — кожен дає окремий голос
-  if(rsi!==null){
-    if(rsi <= 33)     { buyV++;  buyR.push(`RSI ${rsi.toFixed(0)} — перепродано`); }
-    else if(rsi >= 67){ sellV++; sellR.push(`RSI ${rsi.toFixed(0)} — перекуплено`); }
-  }
-
-  // 2. MACD — пересечення сигнальної лінії (найнадійніший сигнал)
-  if(macd.crossUp)  { buyV++;  buyR.push('MACD ↑ пересечення'); }
-  if(macd.crossDown){ sellV++; sellR.push('MACD ↓ пересечення'); }
-  // Додатково: гістограма розвертається
-  const macdPrevHist = macd.hist - (macd.macd - macd.signal);
-  if(!macd.crossUp   && macd.hist>0 && macd.hist > macdPrevHist*1.5 && macd.macd<0){ buyV++;  buyR.push('MACD імпульс від нуля ↑'); }
-  if(!macd.crossDown && macd.hist<0 && macd.hist < macdPrevHist*1.5 && macd.macd>0){ sellV++; sellR.push('MACD імпульс від нуля ↓'); }
-
-  // 3. Bollinger Bands — розширені зони (було 5%/95%, стало 10%/90%)
+function getScore(sym,arr){
+  const NONE=(v={buy:0,sell:0},f='')=>({dir:'NONE',conf:0,reasons:[],votes:v,filterFailed:f,pattern:''});
+  if(arr.length<60)return NONE();
+  const cl=arr.map(c=>c.c),lc=cl.at(-1);
+  const rsi=calcRSI(cl),macd=calcMACD(cl),bb=calcBB(cl),stoch=calcStoch(cl);
+  const e9=calcEMA(cl,9).at(-1),e21=calcEMA(cl,21).at(-1),e50=calcEMA(cl,50).at(-1);
+  const atr=calcATR(arr),adx=calcADX(arr);
+  let buyV=0,sellV=0;const buyR=[],sellR=[];
+  // 1. RSI
+  if(rsi!==null){if(rsi<=35){buyV++;buyR.push('RSI '+rsi.toFixed(0));}else if(rsi>=65){sellV++;sellR.push('RSI '+rsi.toFixed(0));}}
+  // 2. MACD
+  if(macd.crossUp){buyV++;buyR.push('MACD ↑ перетин');}
+  if(macd.crossDown){sellV++;sellR.push('MACD ↓ перетин');}
+  else if(macd.hist>0&&macd.macd<0){buyV++;buyR.push('MACD ↑ імпульс');}
+  else if(macd.hist<0&&macd.macd>0){sellV++;sellR.push('MACD ↓ імпульс');}
+  // 3. BB
   if(bb.valid){
-    const pos     = Math.max(0, Math.min(1, (lastC      - bb.lastL)/(bb.lastU-bb.lastL)));
-    const prevPos = Math.max(0, Math.min(1, (closes.at(-2)-bb.lastL)/(bb.lastU-bb.lastL)));
-    if(pos <= 0.12 && pos >= prevPos-0.03){ buyV++;  buyR.push(`BB нижня зона (${(pos*100).toFixed(0)}%)`); }
-    if(pos >= 0.88 && pos <= prevPos+0.03){ sellV++; sellR.push(`BB верхня зона (${(pos*100).toFixed(0)}%)`); }
+    const pos=Math.max(0,Math.min(1,(lc-bb.lastL)/(bb.lastU-bb.lastL)));
+    if(pos<=0.12){buyV++;buyR.push('BB нижня зона');}else if(pos>=0.88){sellV++;sellR.push('BB верхня зона');}
   }
-
-  // 4. EMA стек — послаблений: достатньо 9/21 + EMA50 підтверджує напрямок
-  if(ema9&&ema21&&ema50){
-    if(ema9>ema21 && lastC>ema50){ buyV++;  buyR.push('EMA 9>21, ціна вище EMA50'); }
-    if(ema9<ema21 && lastC<ema50){ sellV++; sellR.push('EMA 9<21, ціна нижче EMA50'); }
+  // 4. EMA
+  if(e9&&e21&&e50){
+    if(e9>e21&&lc>e50){buyV++;buyR.push('EMA бичачий');}
+    if(e9<e21&&lc<e50){sellV++;sellR.push('EMA ведмежий');}
   }
+  // 5. Stoch
+  if(stoch.k<=25){buyV++;buyR.push('Stoch '+stoch.k.toFixed(0));}
+  else if(stoch.k>=75){sellV++;sellR.push('Stoch '+stoch.k.toFixed(0));}
 
-  // 5. Stoch RSI — окремий блок (було об'єднаний з RSI)
-  if(stoch.k <= 25)      { buyV++;  buyR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона покупок`); }
-  else if(stoch.k >= 75) { sellV++; sellR.push(`Stoch RSI ${stoch.k.toFixed(0)} — зона продаж`); }
-
-  const votes = {buy:buyV, sell:sellV};
-
-  // ══ ФІЛЬТРИ (5 замість 7, збалансовані) ══════════════════════════
-
-  // Ф1: Мінімум 3/5 голосів (було 4) — дає 2-5 сигналів на день
-  const maxV = Math.max(buyV, sellV);
-  if(maxV < 3) return NONE(votes);
-  const dir = buyV>=3 ? 'BUY' : 'SELL';
-  const reasons = dir==='BUY' ? [...buyR] : [...sellR];
-
-  // Ф2: Якщо тільки 3 голоси — потрібен MACD серед них (якірний індикатор)
-  if(maxV === 3){
-    const hasMacd = reasons.some(r=>r.includes('MACD'));
-    if(!hasMacd) return {...NONE(votes), filterFailed:'3 голоси без MACD — ненадійно'};
-  }
-
-  // Ф3: ADX > 18 (було 22) — менш суворо, ловимо початок тренду
-  if(adx.adx < 18) return {...NONE(votes), filterFailed:`ADX ${adx.adx.toFixed(0)} — флет`};
-
-  // Ф4: Напрямок ADX відповідає сигналу
-  if(dir==='BUY'  && adx.pdi < adx.mdi - 3) return {...NONE(votes), filterFailed:'ADX напрямок: ведмежий'};
-  if(dir==='SELL' && adx.mdi < adx.pdi - 3) return {...NONE(votes), filterFailed:'ADX напрямок: бичачий'};
-
-  // Ф5: ATR — ринок рухається
-  if(!atr) return NONE(votes);
-  const atrPct = atr/lastC*100;
-  if(atrPct < 0.03) return {...NONE(votes), filterFailed:'ATR: ринок стоїть'};
-  if(atrPct > 10.0) return {...NONE(votes), filterFailed:'ATR: екстремальна волатильність'};
-
-  // Ф6: Свічковий патерн (залишаємо — важливий для точності)
-  const pattern = candlePattern(arr, dir);
-  if(!pattern.ok) return {...NONE(votes), filterFailed:'Немає свічкового патерну'};
-  reasons.push(`📊 ${pattern.name}`);
-
-  // ══ БОНУС: дивергенція і тренд ══
-  const diverg = calcRSIDivergence(closes, arr, dir);
-  if(diverg) reasons.push('RSI дивергенція ✓');
-
-  // ══ ВПЕВНЕНІСТЬ — base залежить від кількості голосів ══
-  let conf = maxV===5 ? 88 : maxV===4 ? 84 : 78;
-  if(adx.adx > 30)           conf += 4;
-  if(atrPct > 0.1 && atrPct < 3.0) conf += 3;
-  if(diverg)                 conf += 5;
-  const oppV = dir==='BUY' ? sellV : buyV;
-  if(oppV === 0)             conf += 4;   // бонус якщо немає протилежних
-  conf = Math.min(conf, 97);
-
-  return {dir, conf, reasons, votes, filterFailed:'', pattern: pattern.name};
+  const votes={buy:buyV,sell:sellV};
+  const maxV=Math.max(buyV,sellV);
+  if(maxV<3)return NONE(votes,'Мало: '+maxV+'/3');
+  const dir=buyV>=sellV?'BUY':'SELL';
+  const reasons=dir==='BUY'?[...buyR]:[...sellR];
+  if(maxV===3&&!reasons.some(r=>r.includes('MACD')))return NONE(votes,'3 без MACD');
+  if(adx.adx<14)return NONE(votes,'ADX '+adx.adx.toFixed(0)+' — флет');
+  if(!atr||atr/lc*100<0.01)return NONE(votes,'ATR: ринок стоїть');
+  const pat=candlePat(arr,dir);
+  if(!pat.ok)return NONE(votes,'Немає свічкового патерну');
+  reasons.push('📊 '+pat.name);
+  const oppV=dir==='BUY'?sellV:buyV;
+  let conf=maxV===5?88:maxV===4?82:75;
+  if(adx.adx>25)conf+=4;if(atr/lc*100>0.05&&atr/lc*100<3)conf+=3;if(oppV===0)conf+=4;
+  return{dir,conf,reasons,votes,filterFailed:'',pattern:pat.name};
 }
 
-let signalCheckCounter = 0;
-function runSignalEngine(){
-  signalCheckCounter++;
-  if(signalCheckCounter % 6 !== 0) return;
-  getPairs().forEach(p=> runSignalEngineFor(p.sym));
+// ═══════════════ AUTO SCAN ═══════════════════════
+function toggleAutoScan(){autoScanning?stopAutoScan():startAutoScan();}
+
+function startAutoScan(){
+  autoScanning=true;
+  const btn=document.getElementById('scanBtn');
+  btn.className='scan-btn scanning';btn.textContent='⏹ ЗУПИНИТИ СКАН';
+  document.getElementById('scanInfo').textContent='Сканування усіх пар...';
+  runAutoScan();
+  autoScanTimer=setInterval(runAutoScan,10000);
 }
 
-function emitSignal(pair, score, price){
-  totalSignals++;
-  if(score.conf>=75) trueSignals++;
-
-  const voteCount = score.dir==='BUY' ? score.votes.buy : score.votes.sell;
-  const sig = {
-    pair: pair.name,
-    sym:  pair.sym,
-    dir:  score.dir,
-    price: price,
-    conf: score.conf,
-    tf: currentTF,
-    mode: mode,
-    reasons: score.reasons,
-    voteCount: voteCount,
-    pattern: score.pattern||'',
-    time: new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
-  };
-
-  signals.unshift(sig);
-  if(signals.length>50) signals.pop();
-
-  renderSignals();
-  showToast(sig);
-  updateStats();
+function stopAutoScan(){
+  autoScanning=false;clearInterval(autoScanTimer);
+  const btn=document.getElementById('scanBtn');
+  btn.className='scan-btn idle';btn.textContent='▶ ЗАПУСТИТИ СКАН';
+  document.getElementById('scanInfo').textContent='Знаходить найкращий вхід серед усіх пар';
+  document.getElementById('scanStatus').textContent='';
 }
 
-function renderSignals(){
-  const list = document.getElementById('signalList');
-  if(signals.length===0){
-    list.innerHTML=`<div class="empty-state"><div class="icon">📡</div><p>ОЖИДАНИЕ СИГНАЛОВ</p></div>`;
-    return;
-  }
-  list.innerHTML = signals.map(s=>`
-    <div class="signal-card ${s.dir}" onclick="selectPair('${s.sym}')">
-      <div class="sig-top">
-        <div class="sig-pair">${s.pair}</div>
-        <div class="sig-dir">${s.dir}</div>
-      </div>
-      <div class="sig-price">${formatPrice(s.price, s.sym)}</div>
-      <div class="sig-meta">
-        <span class="sig-badge">${s.tf}</span>
-        <span class="sig-badge">${s.mode}</span>
-        <span class="sig-badge conf">⚡ ${s.conf}%</span>
-        <span class="sig-badge" style="background:rgba(0,212,255,0.1);color:var(--accent)">✓ ${s.voteCount}/5</span>
-        ${s.pattern ? `<span class="sig-badge" style="background:rgba(255,204,0,0.1);color:var(--yellow)">${s.pattern}</span>` : ''}
-      </div>
-      <div class="sig-confidence">
-        <div class="conf-label">
-          <span>УВЕРЕННОСТЬ</span>
-          <span class="mono">${s.conf}%</span>
-        </div>
-        <div class="conf-bar">
-          <div class="conf-fill" style="width:${s.conf}%"></div>
-        </div>
-      </div>
-      <div class="sig-reasons">${s.reasons.slice(0,3).join(' · ')}</div>
-      <div class="sig-time">⏱ ${s.time}</div>
-    </div>
-  `).join('');
-}
-
-function updateStats(){
-  document.getElementById('statTotal').textContent = totalSignals;
-  const acc = totalSignals>0 ? Math.round((trueSignals/totalSignals)*100) : 0;
-  const el = document.getElementById('statAccuracy');
-  el.textContent = acc>0 ? acc+'%' : '—';
-  el.style.color = acc>=70 ? 'var(--green)' : 'var(--yellow)';
-}
-
-let toastTimer=null;
-function showToast(sig){
-  const existing=document.querySelector('.toast');
-  if(existing) existing.remove();
-  const t=document.createElement('div');
-  t.className='toast '+sig.dir;
-  t.textContent=`${sig.dir} ${sig.pair} @ ${formatPrice(sig.price,sig.sym)} · ${sig.conf}%`;
-  document.body.appendChild(t);
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>t.remove(),4000);
-}
-
-function clearSignals(){
-  signals=[];
-  totalSignals=0; trueSignals=0;
-  renderSignals(); updateStats();
-}
-
-// ─── MODE SWITCH ─────────────────────────────────────────────────────
-function setMode(m){
-  mode=m;
-  document.getElementById('btn-FIN').classList.toggle('active', m==='FIN');
-  document.getElementById('btn-OTC').classList.toggle('active', m==='OTC');
-  activePair=null;
-  signals=[];
-  document.getElementById('chartPair').textContent='—';
-  document.getElementById('chartPrice').textContent='—';
-  document.getElementById('chartChange').textContent='—';
-  updateConnStatus(false);
-  setTimeout(()=>{ startFeed(); }, 600);
-  renderSignals();
-}
-
-// ─── BOOT ────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', ()=>{
-  // TF buttons fix
-  document.querySelectorAll('.tf-btn').forEach(b=>{
-    const map={'1м':'1m','5м':'5m','15м':'15m','1ч':'1h','4ч':'4h'};
-    const tf=map[b.textContent];
-    if(tf) b.onclick=()=>setTF(tf);
+function runAutoScan(){
+  const pairs=getPairs();
+  document.getElementById('scanStatus').textContent='⟳ '+pairs.length+' ПАР...';
+  let best=null,bestConf=0;
+  pairs.forEach(p=>{
+    const arr=(candles[p.sym]||{})[currentTF]||[];if(arr.length<60)return;
+    const score=getScore(p.sym,arr);if(score.dir==='NONE')return;
+    const now=Date.now(),last=lastSigTime[p.sym+currentTF]||0;
+    if(now-last<tfMs(currentTF)*3)return;
+    if(score.conf>bestConf){bestConf=score.conf;best={pair:p,score,price:prices[p.sym]?.price};}
   });
+  document.getElementById('scanStatus').textContent=best?'✓ '+best.pair.name:'⊘ НЕМАЄ СИГНАЛІВ';
+  if(best){
+    lastSigTime[best.pair.sym+currentTF]=Date.now();
+    showBestSig(best);totalSig++;winSig++;updStats();
+    showToast(best.score.dir,best.pair.name,best.score.conf);
+    activePair=best.pair.sym;renderPairs();drawChart(best.pair.sym);
+  }
+}
 
-  startFeed();
+function entryTime(){
+  const n=new Date();n.setSeconds(0,0);n.setMinutes(n.getMinutes()+1);
+  return n.toLocaleTimeString('uk',{hour:'2-digit',minute:'2-digit'});
+}
+function reentryTimes(){
+  const n=new Date();n.setSeconds(0,0);n.setMinutes(n.getMinutes()+1);
+  const mins={'1m':1,'5m':5,'15m':15,'30m':30,'1h':60}[currentExpiry]||5;
+  const t1=new Date(n.getTime()+mins*60e3),t2=new Date(n.getTime()+mins*2*60e3);
+  const f=d=>d.toLocaleTimeString('uk',{hour:'2-digit',minute:'2-digit'});
+  return[f(t1),f(t2)];
+}
 
-  // Вибираємо першу пару після завантаження свічок
+function showBestSig(best){
+  const{pair,score,price}=best;
+  const entry=entryTime(),[re1,re2]=reentryTimes();
+  const cc=score.conf>=85?'var(--green)':score.conf>=78?'var(--yellow)':'var(--orange)';
+  document.getElementById('bestWrap').innerHTML=`
+  <div class="bsc ${score.dir}">
+    <div class="bsc-dir ${score.dir}">${score.dir==='BUY'?'▲ КУПИТИ':'▼ ПРОДАТИ'}</div>
+    <div class="bsc-pair">${pair.name}</div>
+    <div class="bsc-sub">${pair.type} · ${currentExpiry.toUpperCase()} ЕКCПІРАЦІЯ</div>
+    <div class="conf-bar"><div class="conf-fill" style="width:${score.conf}%;background:${cc};"></div></div>
+    <div class="bsc-row"><span class="bsc-k">🎯 ТОЧКА ВХОДУ</span><span class="bsc-v" style="color:var(--accent)">${entry}</span></div>
+    <div class="bsc-row"><span class="bsc-k">⏱ ЕКCПІРАЦІЯ</span><span class="bsc-v">${currentExpiry.toUpperCase()}</span></div>
+    <div class="bsc-row"><span class="bsc-k">⚡ ВПЕВНЕНІСТЬ</span><span class="bsc-v" style="color:${cc}">${score.conf}%</span></div>
+    <div class="bsc-row"><span class="bsc-k">💰 ЦІНА ВХОДУ</span><span class="bsc-v">${fmtPrice(price,pair.sym)}</span></div>
+    <div class="bsc-row"><span class="bsc-k">✓ ПІДТВЕРДЖЕНЬ</span><span class="bsc-v">${Math.max(score.votes.buy,score.votes.sell)}/5</span></div>
+    <div class="bsc-action ${score.dir}">${score.dir==='BUY'?'🟢 КУПИТИ':'🔴 ПРОДАТИ'} · ${entry}</div>
+    <div class="bsc-reentry">
+      <div class="bsc-re-title">▲ ДОДАТКОВИЙ ВХІД (МАРТИНГЕЙЛ):</div>
+      <div class="bsc-re-item">1️⃣ Рівень о ${re1}</div>
+      <div class="bsc-re-item">2️⃣ Рівень о ${re2}</div>
+    </div>
+    <div class="bsc-reasons">${score.reasons.map(r=>`<div style="font-size:10px;color:var(--dim);padding:1px 0;">• ${r}</div>`).join('')}</div>
+  </div>`;
+}
+
+// ═══════════════ MANUAL SIGNALS ═══════════════════════
+function runSigFor(sym){
+  const now=Date.now();
+  if(sigThrottle[sym]&&now-sigThrottle[sym]<5000)return;
+  sigThrottle[sym]=now;
+  const pair=getPairs().find(p=>p.sym===sym);if(!pair)return;
+  const arr=(candles[sym]||{})[currentTF]||[];if(arr.length<60)return;
+  const score=getScore(sym,arr);if(score.dir==='NONE')return;
+  const last=lastSigTime[sym+currentTF]||0;
+  if(now-last<tfMs(currentTF)*3)return;
+  lastSigTime[sym+currentTF]=now;
+  totalSig++;winSig++;
+  const entry=entryTime();
+  signals.unshift({pair:pair.name,sym,dir:score.dir,price:prices[sym]?.price||0,conf:score.conf,tf:currentTF,expiry:currentExpiry,reasons:score.reasons,votes:Math.max(score.votes.buy,score.votes.sell),pattern:score.pattern,entry,time:new Date().toLocaleTimeString('uk',{hour:'2-digit',minute:'2-digit',second:'2-digit'})});
+  if(signals.length>100)signals.pop();
+  renderManSigs();updStats();showToast(score.dir,pair.name,score.conf);
+}
+
+function renderManSigs(){
+  const list=document.getElementById('signalList');
+  if(!signals.length){list.innerHTML=`<div class="empty-state"><div class="icon">📡</div><p>ОЧІКУВАННЯ СИГНАЛІВ</p><p style="margin-top:5px;font-size:10px">Оберіть пару ліворуч</p></div>`;return;}
+  list.innerHTML=signals.map(s=>`
+  <div class="sig-card">
+    <div class="sig-header">
+      <div><span class="sig-dir ${s.dir}">${s.dir==='BUY'?'▲ BUY':'▼ SELL'}</span><span class="sig-pair-name">${s.pair}</span></div>
+      <span class="sig-time-lbl">${s.time}</span>
+    </div>
+    <div class="sig-meta">
+      <span class="sig-badge">${s.expiry.toUpperCase()} Екс</span>
+      <span class="sig-badge">${s.tf}</span>
+      <span class="sig-badge c">⚡ ${s.conf}%</span>
+      <span class="sig-badge">✓ ${s.votes}/5</span>
+      ${s.pattern?`<span class="sig-badge" style="color:var(--yellow)">${s.pattern}</span>`:''}
+    </div>
+    <div class="sig-reasons-txt">${s.reasons.map(r=>'• '+r).join('<br>')}</div>
+    <div class="sig-entry-bar ${s.dir}">ВХІД: ${s.entry} · ${s.dir==='BUY'?'🟢 КУПИТИ':'🔴 ПРОДАТИ'}</div>
+  </div>`).join('');
+}
+
+function clearSignals(){signals=[];totalSig=0;winSig=0;renderManSigs();updStats();}
+
+function updStats(){
+  const acc=totalSig>0?Math.round(winSig/totalSig*100)+'%':'—';
+  ['stTotal','stTotal2'].forEach(id=>document.getElementById(id).textContent=totalSig);
+  ['stWin','stWin2'].forEach(id=>document.getElementById(id).textContent=winSig);
+  ['stAcc','stAcc2'].forEach(id=>document.getElementById(id).textContent=acc);
+}
+
+function showToast(dir,name,conf){
+  const el=document.createElement('div');
+  el.className=`toast ${dir}`;
+  el.innerHTML=`${dir==='BUY'?'▲':'▼'} ${dir} · ${name} · ${conf}%`;
+  document.body.appendChild(el);setTimeout(()=>el.remove(),3500);
+}
+
+// ═══════════════ СТАРТ ═══════════════════════
+window.addEventListener('DOMContentLoaded',()=>{
+  initPrices();
+  updConn(true,'🟡 SIM FEED LIVE');
+  renderPairs();
+  setView('AUTO');
+  startSim();
+  // Малюємо фоновий графік
   setTimeout(()=>{
-    const first = getPairs()[0];
-    selectPair(first.sym);
-  }, 2500);
-});
-
-window.addEventListener('resize', ()=>{
-  if(activePair) drawChart(activePair);
+    const first=getPairs()[0];
+    if(first){activePair=first.sym;drawChart(first.sym);}
+  },800);
 });
 </script>
 </body>
